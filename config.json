@@ -2,13 +2,13 @@
     "i2c_bus": "2",
     "i2c_address": 72,
     "sample_rate": 128,
+    "sensor_type": "simulation",
     "outputs": [
         {
             "type": "console",
             "interval_ms": 1000
         }
     ],
-    "sensor_type": "real",
     "channels": [
         { "channel": 0, "enabled": true,  "calibration_scale": 1.0, "calibration_offset": 0.0 },
         { "channel": 1, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 }

@@ -4,7 +4,7 @@ BINARY=ads1115-to-mqtt
 
 all: build
 
-RUN_ARGS ?= -outputs console -sensor-type simulation
+RUN_ARGS ?= -outputs console
 
 run:
 	go run ./ $(RUN_ARGS)
