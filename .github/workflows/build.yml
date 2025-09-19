@@ -4,8 +4,14 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
+    paths-ignore:
+      - 'README.md'
+      - 'Makefile'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'Makefile'
 
 jobs:
   build:
@@ -87,3 +93,67 @@ jobs:
         with:
           name: ${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}
           path: release/*
+
+  publish:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag points to main
+        id: verify
+        run: |
+          set -euo pipefail
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          # ensure we have origin/main
+          git fetch origin main
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "on_main=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $GITHUB_REF ($GITHUB_SHA) is on origin/main"
+          else
+            echo "on_main=false" >> "$GITHUB_OUTPUT"
+            echo "Tag $GITHUB_REF ($GITHUB_SHA) is NOT on origin/main; skipping release"
+          fi
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        id: create_release
+        if: steps.verify.outputs.on_main == 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          body: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Upload assets to release
+        if: steps.verify.outputs.on_main == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPLOAD_URL: ${{ steps.create_release.outputs.upload_url }}
+        run: |
+          set -euo pipefail
+          upload_url="${UPLOAD_URL%\{*}"
+          echo "Upload URL: $upload_url"
+          # find all files downloaded by actions/download-artifact and upload each
+          find artifacts -type f -print0 | while IFS= read -r -d '' file; do
+            name=$(basename "$file")
+            echo "Uploading $name..."
+            curl -sS -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$file" "$upload_url?name=$name"
+          done
