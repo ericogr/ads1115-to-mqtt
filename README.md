@@ -43,14 +43,17 @@ make build
   "i2c_bus": "2",
   "i2c_address": 72,
   "sample_rate": 128,
-  "calibration_scale": 1.0,
-  "calibration_offset": 0.0,
   "outputs": [
     { "type": "console" },
     { "type": "mqtt", "mqtt": { "server": "tcp://localhost:1883", "client_id": "ads1115", "topic": "ads1115" } }
   ],
   "sensor_type": "real",
-  "channels": [0,1,2,3]
+  "channels": [
+    { "channel": 0, "enabled": true,  "calibration_scale": 1.0, "calibration_offset": 0.0 },
+    { "channel": 1, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 },
+    { "channel": 2, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 },
+    { "channel": 3, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 }
+  ]
 }
 ```
 
@@ -64,18 +67,21 @@ The table below is the authoritative reference for configuration fields and corr
 |---|---|---|
 | `i2c_bus` | `-i2c-bus` | I2C bus to use (string). Example: `"2"` → `/dev/i2c-2`. Default: `"2"`. |
 | `i2c_address` | `-i2c-address` | ADS1115 I2C address (decimal or `0x` hex). Default: `0x48` (72). |
-| `sample_rate` | `-sample-rate` | ADS1115 conversion rate in SPS. Supported values: `8,16,32,64,128,250,475,860`. Default: `128`. Used to compute conversion time (~1000/sample_rate ms) and a recommended sensor read interval (≈ channels*(1000/sample_rate + 2ms)). |
-| `calibration_scale` | `-calibration` | Multiplicative calibration factor applied to converted readings. Default: `1.0`. |
-| `calibration_offset` | `-calibration-offset` | Additive calibration offset applied after scaling. Default: `0.0`. |
+| `sample_rate` | `-sample-rate` | Global ADS1115 conversion rate in SPS used as a default when a channel doesn't override it. Supported values: `8,16,32,64,128,250,475,860`. Default: `128`. |
+| `channels[]` | `-channels` | Array of per-channel objects (see sub-rows). The CLI `-channels` flag accepts a CSV of indices to enable (e.g. `-channels 0,1`). |
+| `channels[].channel` | (none) | Channel index (0..3). |
+| `channels[].enabled` | (none) | Whether this channel is read. Default: `false`. |
+| `channels[].sample_rate` | (none) | Optional per-channel sample rate (SPS). If omitted, the root `sample_rate` is used for that channel. |
+| `channels[].calibration_scale` | `-calibration` | Per-channel multiplicative calibration factor. Default per-channel: `1.0`. The `-calibration` flag (if provided) overrides all per-channel scales. |
+| `channels[].calibration_offset` | `-calibration-offset` | Per-channel additive offset applied after scaling. Default per-channel: `0.0`. The `-calibration-offset` flag (if provided) overrides all per-channel offsets. |
 | `outputs[].type` | `-outputs` | Output type: `console` or `mqtt`. CLI accepts CSV (e.g. `console,mqtt`) for quick config which creates basic entries. |
-| `outputs[].interval_ms` | `-output-intervals` | Publish interval (ms) for this output. If omitted, a recommended interval is derived from `sample_rate` and channels (approx: channels*(1000/sample_rate + 2ms)). Use `-output-intervals` CSV to set per-output values, e.g. `console=1000,mqtt=5000`. |
+| `outputs[].interval_ms` | `-output-intervals` | Publish interval (ms) for this output. If omitted, a recommended interval is derived from enabled channels and their sample rates (approx: sum over enabled channels of `1000/sample_rate + 2ms`). Use `-output-intervals` CSV to set per-output values, e.g. `console=1000,mqtt=5000`. |
 | `outputs[].mqtt.server` | `-mqtt-server` | MQTT broker URL (e.g. `tcp://host:1883`). Applied to all `mqtt` outputs; if none exist and flags provided, a `mqtt` output will be created. |
 | `outputs[].mqtt.username` | `-mqtt-user` | MQTT username (optional). |
 | `outputs[].mqtt.password` | `-mqtt-pass` | MQTT password (optional). |
 | `outputs[].mqtt.client_id` | `-mqtt-client-id` | MQTT client id (optional). |
 | `outputs[].mqtt.topic` | `-mqtt-topic` | Base topic to publish readings under (e.g. `ads1115`). |
 | `sensor_type` | `-sensor-type` | `real` (ADS1115 via I2C) or `simulation` (fake sensor). Default: `real`. |
-| `channels` | `-channels` | CSV or array of channel indices to read (0..3). Default: `0,1,2,3`. |
 | `config` | `-config` | Path to JSON config file. Default: `./config.json` if present. Flags override file values. |
 
 ## Best practices

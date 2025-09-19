@@ -24,27 +24,37 @@ type OutputConfig struct {
 	MQTT       *MQTTConfig `json:"mqtt,omitempty"`
 }
 
+// ChannelConfig holds per-channel parameters: enabled, calibration and optional sample rate.
+type ChannelConfig struct {
+	Channel           int     `json:"channel"`
+	Enabled           bool    `json:"enabled"`
+	SampleRate        int     `json:"sample_rate,omitempty"`
+	CalibrationScale  float64 `json:"calibration_scale,omitempty"`
+	CalibrationOffset float64 `json:"calibration_offset,omitempty"`
+}
+
 type Config struct {
-	I2CBus            string         `json:"i2c_bus"`
-	I2CAddress        int            `json:"i2c_address"`
-	SampleRate        int            `json:"sample_rate"`
-	CalibrationScale  float64        `json:"calibration_scale"`
-	CalibrationOffset float64        `json:"calibration_offset"`
-	Outputs           []OutputConfig `json:"outputs"`
-	SensorType        string         `json:"sensor_type"`
-	Channels          []int          `json:"channels"`
+	I2CBus     string          `json:"i2c_bus"`
+	I2CAddress int             `json:"i2c_address"`
+	SampleRate int             `json:"sample_rate"`
+	Outputs    []OutputConfig  `json:"outputs"`
+	SensorType string          `json:"sensor_type"`
+	Channels   []ChannelConfig `json:"channels"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		I2CBus:            "2",
-		I2CAddress:        0x48,
-		SampleRate:        128,
-		CalibrationScale:  1.0,
-		CalibrationOffset: 0.0,
-		Outputs:           []OutputConfig{{Type: "console"}},
-		SensorType:        "real",
-		Channels:          []int{0, 1, 2, 3},
+		I2CBus:     "2",
+		I2CAddress: 0x48,
+		SampleRate: 128,
+		Outputs:    []OutputConfig{{Type: "console"}},
+		SensorType: "real",
+		Channels: []ChannelConfig{
+			{Channel: 0, Enabled: false, CalibrationScale: 1.0, CalibrationOffset: 0.0},
+			{Channel: 1, Enabled: false, CalibrationScale: 1.0, CalibrationOffset: 0.0},
+			{Channel: 2, Enabled: false, CalibrationScale: 1.0, CalibrationOffset: 0.0},
+			{Channel: 3, Enabled: false, CalibrationScale: 1.0, CalibrationOffset: 0.0},
+		},
 	}
 }
 
@@ -55,15 +65,15 @@ func LoadFromFlags() (Config, error) {
 	flagI2CBus := flag.String("i2c-bus", "", "I2C bus (e.g., '2' -> /dev/i2c-2)")
 	flagI2CAddStr := flag.String("i2c-address", "", "I2C address (decimal or 0x hex)")
 	flagSampleRate := flag.Int("sample-rate", -1, "ADS1115 sample rate (SPS)")
-	flagCalibration := flag.Float64("calibration", math.NaN(), "Calibration scale factor (multiplier)")
-	flagCalOffset := flag.Float64("calibration-offset", math.NaN(), "Calibration offset")
+	flagCalibration := flag.Float64("calibration", math.NaN(), "Calibration scale factor (multiplier) applied to all channels (overrides channel values)")
+	flagCalOffset := flag.Float64("calibration-offset", math.NaN(), "Calibration offset applied to all channels (overrides channel values)")
 	flagOutputs := flag.String("outputs", "", "Comma-separated outputs (console,mqtt)")
 	flagOutputIntervals := flag.String("output-intervals", "", "Comma-separated output intervals e.g. console=1000,mqtt=5000")
 	flagMQTTServer := flag.String("mqtt-server", "", "MQTT server (tcp://host:port)")
 	flagMQTTUser := flag.String("mqtt-user", "", "MQTT username")
 	flagMQTTPass := flag.String("mqtt-pass", "", "MQTT password")
 	flagSensorType := flag.String("sensor-type", "", "sensor type: real|simulation")
-	flagChannels := flag.String("channels", "", "Comma-separated channels e.g. 0,1,2,3")
+	flagChannels := flag.String("channels", "", "Comma-separated channels to enable e.g. 0,1,2,3")
 	flagClientID := flag.String("mqtt-client-id", "", "MQTT client id")
 	flagTopic := flag.String("mqtt-topic", "", "MQTT topic base")
 
@@ -83,6 +93,7 @@ func LoadFromFlags() (Config, error) {
 		if err != nil {
 			return cfg, fmt.Errorf("read config: %w", err)
 		}
+		// Unmarshal into the new Config shape (channels are per-channel objects).
 		if err := json.Unmarshal(b, &cfg); err != nil {
 			return cfg, fmt.Errorf("parse config: %w", err)
 		}
@@ -101,11 +112,16 @@ func LoadFromFlags() (Config, error) {
 	if *flagSampleRate != -1 {
 		cfg.SampleRate = *flagSampleRate
 	}
+	// If calibration flags provided, apply them to all configured channels (override channel values)
 	if !math.IsNaN(*flagCalibration) {
-		cfg.CalibrationScale = *flagCalibration
+		for i := range cfg.Channels {
+			cfg.Channels[i].CalibrationScale = *flagCalibration
+		}
 	}
 	if !math.IsNaN(*flagCalOffset) {
-		cfg.CalibrationOffset = *flagCalOffset
+		for i := range cfg.Channels {
+			cfg.Channels[i].CalibrationOffset = *flagCalOffset
+		}
 	}
 	if *flagOutputs != "" {
 		// convert simple CSV of types into structured OutputConfig entries
@@ -192,7 +208,14 @@ func LoadFromFlags() (Config, error) {
 		if err != nil {
 			return cfg, err
 		}
-		cfg.Channels = chs
+		// enable channels specified by flag
+		for _, c := range chs {
+			for i := range cfg.Channels {
+				if cfg.Channels[i].Channel == c {
+					cfg.Channels[i].Enabled = true
+				}
+			}
+		}
 	}
 	// NOTE: outputs[].interval_ms defaulting and sensor interval calculation are handled in the caller (main) based on sample_rate and channels
 

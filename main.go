@@ -24,10 +24,10 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	// compute sensor interval based on sample_rate and number of channels
-	sensorIntervalMs := computeSensorInterval(cfg.SampleRate, len(cfg.Channels))
+	// compute sensor interval based on effective per-channel sample_rate and enabled channels
+	sensorIntervalMs := computeSensorInterval(cfg)
 
-	outs, err := initOutputs(cfg, sensorIntervalMs)
+	outs, err := initOutputs(&cfg, sensorIntervalMs)
 	if err != nil {
 		log.Fatalf("outputs: %v", err)
 	}
@@ -41,14 +41,32 @@ func main() {
 	runLoop(cfg, s, outs, sensorIntervalMs)
 }
 
-func computeSensorInterval(sampleRate int, channelCount int) int {
-	if sampleRate <= 0 {
-		sampleRate = 128
+func computeSensorInterval(cfg config.Config) int {
+	perSampleOverhead := 2.0
+	total := 0.0
+	enabled := 0
+	for _, c := range cfg.Channels {
+		if !c.Enabled {
+			continue
+		}
+		enabled++
+		sr := c.SampleRate
+		if sr == 0 {
+			sr = cfg.SampleRate
+		}
+		if sr <= 0 {
+			sr = 128
+		}
+		total += 1000.0/float64(sr) + perSampleOverhead
 	}
-	// conversion time per sample in ms + small overhead
-	perSampleMs := 1000.0 / float64(sampleRate)
-	overheadMs := 2.0
-	total := float64(channelCount) * (perSampleMs + overheadMs)
+	if enabled == 0 {
+		// fallback to a single-sample interval using global sample rate
+		sr := cfg.SampleRate
+		if sr <= 0 {
+			sr = 128
+		}
+		return int(1000.0/float64(sr) + perSampleOverhead + 0.5)
+	}
 	return int(total + 0.5)
 }
 
@@ -63,14 +81,15 @@ type outputEntry struct {
 	IntervalMs int
 }
 
-func initOutputs(cfg config.Config, sensorIntervalMs int) ([]outputEntry, error) {
+func initOutputs(cfg *config.Config, sensorIntervalMs int) ([]outputEntry, error) {
 	entries := make([]outputEntry, 0, len(cfg.Outputs))
-	for _, o := range cfg.Outputs {
+	for i := range cfg.Outputs {
+		o := &cfg.Outputs[i]
 		typ := strings.ToLower(o.Type)
-		interval := o.IntervalMs
-		if interval == 0 {
-			interval = sensorIntervalMs
+		if o.IntervalMs == 0 {
+			o.IntervalMs = sensorIntervalMs
 		}
+		interval := o.IntervalMs
 		switch typ {
 		case "console":
 			entries = append(entries, outputEntry{Out: console.NewConsole(), IntervalMs: interval})

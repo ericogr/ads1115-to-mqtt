@@ -16,13 +16,16 @@ const (
 )
 
 type ADS1115Sensor struct {
-	dev        *i2c.Dev
-	bus        i2c.BusCloser
-	channels   []int
-	sampleRate int
-	scale      float64
-	offset     float64
-	pgaFS      float64
+	dev      *i2c.Dev
+	bus      i2c.BusCloser
+	channels []int
+	// defaultSampleRate is the global sample rate from config; individual channels may override.
+	defaultSampleRate int
+	// per-channel settings
+	channelSampleRates map[int]int
+	channelScales      map[int]float64
+	channelOffsets     map[int]float64
+	pgaFS              float64
 }
 
 func NewADS1115Sensor(cfg config.Config) (Sensor, error) {
@@ -34,7 +37,22 @@ func NewADS1115Sensor(cfg config.Config) (Sensor, error) {
 		return nil, fmt.Errorf("open i2c: %w", err)
 	}
 	dev := &i2c.Dev{Addr: uint16(cfg.I2CAddress), Bus: bus}
-	return &ADS1115Sensor{dev: dev, bus: bus, channels: cfg.Channels, sampleRate: cfg.SampleRate, scale: cfg.CalibrationScale, offset: cfg.CalibrationOffset, pgaFS: 4.096}, nil
+	// build enabled channels list and per-channel maps
+	chans := make([]int, 0)
+	csr := make(map[int]int)
+	cscale := make(map[int]float64)
+	coff := make(map[int]float64)
+	for _, c := range cfg.Channels {
+		cscale[c.Channel] = c.CalibrationScale
+		coff[c.Channel] = c.CalibrationOffset
+		if c.SampleRate != 0 {
+			csr[c.Channel] = c.SampleRate
+		}
+		if c.Enabled {
+			chans = append(chans, c.Channel)
+		}
+	}
+	return &ADS1115Sensor{dev: dev, bus: bus, channels: chans, defaultSampleRate: cfg.SampleRate, channelSampleRates: csr, channelScales: cscale, channelOffsets: coff, pgaFS: 4.096}, nil
 }
 
 func (s *ADS1115Sensor) Close() error {
@@ -46,9 +64,16 @@ func (s *ADS1115Sensor) Close() error {
 
 func (s *ADS1115Sensor) Read() ([]Reading, error) {
 	out := make([]Reading, 0, len(s.channels))
+
 	now := time.Now()
 	for _, ch := range s.channels {
-		msb, lsb, err := s.configForChannel(ch)
+		// pick effective sample rate for this channel (fall back to default)
+		sampleRate := s.defaultSampleRate
+		if v, ok := s.channelSampleRates[ch]; ok && v != 0 {
+			sampleRate = v
+		}
+
+		msb, lsb, err := s.configForChannel(ch, sampleRate)
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +82,7 @@ func (s *ADS1115Sensor) Read() ([]Reading, error) {
 			return nil, fmt.Errorf("write config: %w", err)
 		}
 		// wait for conversion (simple sleep)
-		delayMs := int(1000.0/float64(s.sampleRate)) + 2
+		delayMs := int(1000.0/float64(sampleRate)) + 2
 		time.Sleep(time.Duration(delayMs) * time.Millisecond)
 		// read conversion
 		readBuf := make([]byte, 2)
@@ -65,13 +90,22 @@ func (s *ADS1115Sensor) Read() ([]Reading, error) {
 			return nil, fmt.Errorf("read conv: %w", err)
 		}
 		raw := int16(readBuf[0])<<8 | int16(readBuf[1])
-		value := float64(raw)*s.pgaFS/32768.0*s.scale + s.offset
+		// apply per-channel calibration
+		scale := 1.0
+		off := 0.0
+		if v, ok := s.channelScales[ch]; ok {
+			scale = v
+		}
+		if v, ok := s.channelOffsets[ch]; ok {
+			off = v
+		}
+		value := float64(raw)*s.pgaFS/32768.0*scale + off
 		out = append(out, Reading{Channel: ch, Raw: raw, Value: value, Timestamp: now})
 	}
 	return out, nil
 }
 
-func (s *ADS1115Sensor) configForChannel(channel int) (byte, byte, error) {
+func (s *ADS1115Sensor) configForChannel(channel int, sampleRate int) (byte, byte, error) {
 	var mux byte
 	switch channel {
 	case 0:
@@ -89,7 +123,7 @@ func (s *ADS1115Sensor) configForChannel(channel int) (byte, byte, error) {
 	pga := byte(0x1)
 	// data rate bits
 	var dr byte
-	switch s.sampleRate {
+	switch sampleRate {
 	case 8:
 		dr = 0x0
 	case 16:
