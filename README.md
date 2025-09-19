@@ -68,12 +68,12 @@ The table below is the authoritative reference for configuration fields and corr
 | `i2c_bus` | `-i2c-bus` | I2C bus to use (string). Example: `"2"` → `/dev/i2c-2`. Default: `"2"`. |
 | `i2c_address` | `-i2c-address` | ADS1115 I2C address (decimal or `0x` hex). Default: `0x48` (72). |
 | `sample_rate` | `-sample-rate` | Global ADS1115 conversion rate in SPS used as a default when a channel doesn't override it. Supported values: `8,16,32,64,128,250,475,860`. Default: `128`. |
-| `channels[]` | `-channels` | Array of per-channel objects (see sub-rows). The CLI `-channels` flag accepts a CSV of indices to enable (e.g. `-channels 0,1`). |
+| `channels[]` | `-channels` | Array of per-channel objects. CLI `-channels` accepts a CSV of indices to enable (e.g. `-channels 0,1`). See per-field flags below. |
 | `channels[].channel` | (none) | Channel index (0..3). |
-| `channels[].enabled` | (none) | Whether this channel is read. Default: `false`. |
-| `channels[].sample_rate` | (none) | Optional per-channel sample rate (SPS). If omitted, the root `sample_rate` is used for that channel. |
-| `channels[].calibration_scale` | `-calibration` | Per-channel multiplicative calibration factor. Default per-channel: `1.0`. The `-calibration` flag (if provided) overrides all per-channel scales. |
-| `channels[].calibration_offset` | `-calibration-offset` | Per-channel additive offset applied after scaling. Default per-channel: `0.0`. The `-calibration-offset` flag (if provided) overrides all per-channel offsets. |
+| `channels[].enabled` | `-channel-enabled` (or `-channels`) | Whether this channel is read. Default: `false`. `-channels` is shorthand to enable a list; `-channel-enabled` accepts mappings like `0=true,1=false`. |
+| `channels[].sample_rate` | `-channel-sample-rates` | Optional per-channel sample rate (SPS). Mapping example: `0=250,1=128`. If omitted, root `sample_rate` is used. |
+| `channels[].calibration_scale` | `-channel-scales` / `-calibration` | Per-channel multiplicative calibration factor. Mapping example: `0=1.0,1=0.98`. The global `-calibration` flag (if provided) overrides per-channel scales. Default per-channel: `1.0`. |
+| `channels[].calibration_offset` | `-channel-offsets` / `-calibration-offset` | Per-channel additive offset applied after scaling. Mapping example: `0=0.12,1=-0.05`. The global `-calibration-offset` flag (if provided) overrides per-channel offsets. Default per-channel: `0.0`. |
 | `outputs[].type` | `-outputs` | Output type: `console` or `mqtt`. CLI accepts CSV (e.g. `console,mqtt`) for quick config which creates basic entries. |
 | `outputs[].interval_ms` | `-output-intervals` | Publish interval (ms) for this output. If omitted, a recommended interval is derived from enabled channels and their sample rates (approx: sum over enabled channels of `1000/sample_rate + 2ms`). Use `-output-intervals` CSV to set per-output values, e.g. `console=1000,mqtt=5000`. |
 | `outputs[].mqtt.server` | `-mqtt-server` | MQTT broker URL (e.g. `tcp://host:1883`). Applied to all `mqtt` outputs; if none exist and flags provided, a `mqtt` output will be created. |
@@ -83,11 +83,6 @@ The table below is the authoritative reference for configuration fields and corr
 | `outputs[].mqtt.topic` | `-mqtt-topic` | Base topic to publish readings under (e.g. `ads1115`). |
 | `sensor_type` | `-sensor-type` | `real` (ADS1115 via I2C) or `simulation` (fake sensor). Default: `real`. |
 | `config` | `-config` | Path to JSON config file. Default: `./config.json` if present. Flags override file values. |
-
-| `channels[].calibration_scale` | `-channel-scales` | Comma-separated per-channel scales mapping, e.g. `0=1.0,1=0.98`. Overrides config file values for the specified channels. |
-| `channels[].calibration_offset` | `-channel-offsets` | Comma-separated per-channel offsets mapping, e.g. `0=0.12,1=-0.05`. Overrides config file values for the specified channels. |
-| `channels[].sample_rate` | `-channel-sample-rates` | Comma-separated per-channel sample rates mapping, e.g. `0=250,1=128`. Overrides root `sample_rate` for the specified channels. |
-| `channels[].enabled` | `-channel-enabled` | Comma-separated per-channel enabled mapping, e.g. `0=true,1=false`. Shorthand `-channels` still accepted to enable a list of channels. |
 
 ## Best practices
 
