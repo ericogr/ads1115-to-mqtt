@@ -61,15 +61,20 @@ jobs:
 
       - name: Determine version
         id: vars
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-          else
-            echo "VERSION=dev-${GITHUB_SHA::7}" >> $GITHUB_ENV
-          fi
-          echo "COMMIT=${GITHUB_SHA}" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
-
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const core = require('@actions/core');
+            const ref = process.env.GITHUB_REF || '';
+            let version;
+            if (ref.startsWith('refs/tags/')) {
+              version = ref.replace('refs/tags/', '');
+            } else {
+              version = `dev-${(process.env.GITHUB_SHA || '').slice(0,7)}`;
+            }
+            core.exportVariable('VERSION', version);
+            core.exportVariable('COMMIT', process.env.GITHUB_SHA || '');
+            core.exportVariable('BUILD_DATE', new Date().toISOString());
       - name: Build
         shell: bash
         env:
