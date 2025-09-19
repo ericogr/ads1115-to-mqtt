@@ -28,3 +28,7 @@ build-windows:
 
 clean:
 	rm -rf bin/*
+
+.PHONY: test
+test:
+	GOCACHE=/tmp/gocache go test ./...

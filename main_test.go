@@ -31,3 +31,20 @@ func TestComputeSensorInterval(t *testing.T) {
 		t.Fatalf("mixed interval: got %d want 16", got)
 	}
 }
+
+func TestInitOutputsSetsInterval(t *testing.T) {
+	cfg := config.Config{Outputs: []config.OutputConfig{{Type: "console"}}}
+	entries, err := initOutputs(&cfg, 123)
+	if err != nil {
+		t.Fatalf("initOutputs: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries len: %d", len(entries))
+	}
+	if cfg.Outputs[0].IntervalMs != 123 {
+		t.Fatalf("cfg output interval not set, got %d", cfg.Outputs[0].IntervalMs)
+	}
+	if entries[0].IntervalMs != 123 {
+		t.Fatalf("entry interval not set, got %d", entries[0].IntervalMs)
+	}
+}
