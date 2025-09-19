@@ -74,6 +74,10 @@ func LoadFromFlags() (Config, error) {
 	flagMQTTPass := flag.String("mqtt-pass", "", "MQTT password")
 	flagSensorType := flag.String("sensor-type", "", "sensor type: real|simulation")
 	flagChannels := flag.String("channels", "", "Comma-separated channels to enable e.g. 0,1,2,3")
+	flagChannelScales := flag.String("channel-scales", "", "Comma-separated per-channel scales e.g. 0=1.0,1=0.98")
+	flagChannelOffsets := flag.String("channel-offsets", "", "Comma-separated per-channel offsets e.g. 0=0.12,1=-0.05")
+	flagChannelSampleRates := flag.String("channel-sample-rates", "", "Comma-separated per-channel sample rates e.g. 0=250,1=128")
+	flagChannelEnabled := flag.String("channel-enabled", "", "Comma-separated per-channel enabled flags e.g. 0=true,1=false (alternative to -channels)")
 	flagClientID := flag.String("mqtt-client-id", "", "MQTT client id")
 	flagTopic := flag.String("mqtt-topic", "", "MQTT topic base")
 
@@ -217,6 +221,87 @@ func LoadFromFlags() (Config, error) {
 			}
 		}
 	}
+
+	// per-channel mappings via flags (override file values)
+	if *flagChannelEnabled != "" {
+		m, err := parseKeyBoolMap(*flagChannelEnabled)
+		if err != nil {
+			return cfg, err
+		}
+		for ch, val := range m {
+			applied := false
+			for i := range cfg.Channels {
+				if cfg.Channels[i].Channel == ch {
+					cfg.Channels[i].Enabled = val
+					applied = true
+					break
+				}
+			}
+			if !applied {
+				cfg.Channels = append(cfg.Channels, ChannelConfig{Channel: ch, Enabled: val, CalibrationScale: 1.0, CalibrationOffset: 0.0})
+			}
+		}
+	}
+
+	if *flagChannelScales != "" {
+		m, err := parseKeyFloatMap(*flagChannelScales)
+		if err != nil {
+			return cfg, err
+		}
+		for ch, v := range m {
+			applied := false
+			for i := range cfg.Channels {
+				if cfg.Channels[i].Channel == ch {
+					cfg.Channels[i].CalibrationScale = v
+					applied = true
+					break
+				}
+			}
+			if !applied {
+				cfg.Channels = append(cfg.Channels, ChannelConfig{Channel: ch, Enabled: false, CalibrationScale: v, CalibrationOffset: 0.0})
+			}
+		}
+	}
+
+	if *flagChannelOffsets != "" {
+		m, err := parseKeyFloatMap(*flagChannelOffsets)
+		if err != nil {
+			return cfg, err
+		}
+		for ch, v := range m {
+			applied := false
+			for i := range cfg.Channels {
+				if cfg.Channels[i].Channel == ch {
+					cfg.Channels[i].CalibrationOffset = v
+					applied = true
+					break
+				}
+			}
+			if !applied {
+				cfg.Channels = append(cfg.Channels, ChannelConfig{Channel: ch, Enabled: false, CalibrationScale: 1.0, CalibrationOffset: v})
+			}
+		}
+	}
+
+	if *flagChannelSampleRates != "" {
+		m, err := parseKeyIntMap(*flagChannelSampleRates)
+		if err != nil {
+			return cfg, err
+		}
+		for ch, v := range m {
+			applied := false
+			for i := range cfg.Channels {
+				if cfg.Channels[i].Channel == ch {
+					cfg.Channels[i].SampleRate = v
+					applied = true
+					break
+				}
+			}
+			if !applied {
+				cfg.Channels = append(cfg.Channels, ChannelConfig{Channel: ch, Enabled: false, SampleRate: v, CalibrationScale: 1.0, CalibrationOffset: 0.0})
+			}
+		}
+	}
 	// NOTE: outputs[].interval_ms defaulting and sensor interval calculation are handled in the caller (main) based on sample_rate and channels
 
 	// validate sample rate
@@ -268,6 +353,75 @@ func parseChannels(s string) ([]int, error) {
 			return nil, fmt.Errorf("invalid channel '%s': %w", t, err)
 		}
 		out = append(out, v)
+	}
+	return out, nil
+}
+
+func parseKeyFloatMap(s string) (map[int]float64, error) {
+	out := map[int]float64{}
+	parts := parseCSV(s)
+	for _, p := range parts {
+		kv := strings.SplitN(p, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid mapping '%s'", p)
+		}
+		k := strings.TrimSpace(kv[0])
+		vstr := strings.TrimSpace(kv[1])
+		ki, err := strconv.Atoi(k)
+		if err != nil {
+			return nil, fmt.Errorf("invalid channel '%s': %w", k, err)
+		}
+		vf, err := strconv.ParseFloat(vstr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for channel %d: %w", ki, err)
+		}
+		out[ki] = vf
+	}
+	return out, nil
+}
+
+func parseKeyIntMap(s string) (map[int]int, error) {
+	out := map[int]int{}
+	parts := parseCSV(s)
+	for _, p := range parts {
+		kv := strings.SplitN(p, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid mapping '%s'", p)
+		}
+		k := strings.TrimSpace(kv[0])
+		vstr := strings.TrimSpace(kv[1])
+		ki, err := strconv.Atoi(k)
+		if err != nil {
+			return nil, fmt.Errorf("invalid channel '%s': %w", k, err)
+		}
+		vi, err := strconv.Atoi(vstr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid int value for channel %d: %w", ki, err)
+		}
+		out[ki] = vi
+	}
+	return out, nil
+}
+
+func parseKeyBoolMap(s string) (map[int]bool, error) {
+	out := map[int]bool{}
+	parts := parseCSV(s)
+	for _, p := range parts {
+		kv := strings.SplitN(p, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid mapping '%s'", p)
+		}
+		k := strings.TrimSpace(kv[0])
+		vstr := strings.TrimSpace(kv[1])
+		ki, err := strconv.Atoi(k)
+		if err != nil {
+			return nil, fmt.Errorf("invalid channel '%s': %w", k, err)
+		}
+		vb, err := strconv.ParseBool(vstr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid bool value for channel %d: %w", ki, err)
+		}
+		out[ki] = vb
 	}
 	return out, nil
 }

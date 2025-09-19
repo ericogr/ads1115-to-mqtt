@@ -84,6 +84,11 @@ The table below is the authoritative reference for configuration fields and corr
 | `sensor_type` | `-sensor-type` | `real` (ADS1115 via I2C) or `simulation` (fake sensor). Default: `real`. |
 | `config` | `-config` | Path to JSON config file. Default: `./config.json` if present. Flags override file values. |
 
+| `channels[].calibration_scale` | `-channel-scales` | Comma-separated per-channel scales mapping, e.g. `0=1.0,1=0.98`. Overrides config file values for the specified channels. |
+| `channels[].calibration_offset` | `-channel-offsets` | Comma-separated per-channel offsets mapping, e.g. `0=0.12,1=-0.05`. Overrides config file values for the specified channels. |
+| `channels[].sample_rate` | `-channel-sample-rates` | Comma-separated per-channel sample rates mapping, e.g. `0=250,1=128`. Overrides root `sample_rate` for the specified channels. |
+| `channels[].enabled` | `-channel-enabled` | Comma-separated per-channel enabled mapping, e.g. `0=true,1=false`. Shorthand `-channels` still accepted to enable a list of channels. |
+
 ## Best practices
 
 - For multiple channels, ensure `outputs[].interval_ms` is >= sensor read interval (derived from `sample_rate`) to avoid publishing identical snapshots repeatedly.
