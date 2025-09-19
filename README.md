@@ -1,33 +1,44 @@
 # ADS1115 to MQTT
 
-Leitura analógica via ADS1115 (4 canais) e publicação das leituras em saídas configuráveis (console, MQTT).
+Analog readings from an ADS1115 (4 channels) with configurable outputs (console, MQTT).
 
-Visão geral
-- Leitura do ADS1115 por I2C (ou sensor de simulação para testes).
-- Saídas configuráveis por item (`outputs[]`) — cada saída tem `type` e `interval_ms`.
-- Configuração por arquivo JSON (`./config.json` por padrão) e/ou flags; flags têm precedência.
+## Overview
 
-Principais usos
-- Testes/Desenvolvimento: `make run` (usa sensor fake + saída `console`).
-- Produção: `make build` e executar o binário com `-config` ou flags.
+- Read ADS1115 over I2C (or use a simulated sensor for testing).
+- Configure one or more outputs via `outputs[]` in the config; each output has a `type` and optional `interval_ms`.
+- Load configuration from `config.json` in the current directory by default, or pass `-config /path/to/file`. Command-line flags override file values.
 
-Quickstart
+## Main use cases
 
-1. Executar em modo dev (console + simulação):
+- Development / testing: `make run` (starts with a fake sensor and console output).
+- Production: `make build` and run the produced binary with `-config` or flags.
 
-   make run
+## Quickstart
 
-2. Compilar:
-
-   make build
-
-3. Executar binário (exemplo):
-
-   ./bin/ads1115-to-mqtt -outputs console,mqtt -output-intervals console=1000,mqtt=5000 -mqtt-server tcp://broker:1883
-
-Arquivo de exemplo (`config.json`)
+### Developer run (console + simulation)
 
 ```
+make run
+```
+
+### Build
+
+```
+make build
+```
+
+### Run built binary (example)
+
+```
+./bin/ads1115-to-mqtt -outputs console,mqtt -output-intervals console=1000,mqtt=5000 -mqtt-server tcp://broker:1883
+```
+
+
+## Configuration
+
+### Example config (`config.json`)
+
+```json
 {
   "i2c_bus": "2",
   "i2c_address": 72,
@@ -43,50 +54,56 @@ Arquivo de exemplo (`config.json`)
 }
 ```
 
-Esquema (config.json) — o que cada campo faz
+### Fields
 
-- `i2c_bus` (string): barramento I2C a usar (ex.: `"2"` → `/dev/i2c-2`).
-- `i2c_address` (int/hex): endereço I2C do ADS1115 (ex.: `72` ou `0x48`).
-- `sample_rate` (int): taxa de conversão do ADS1115 em SPS. Valores suportados: `8, 16, 32, 64, 128, 250, 475, 860`. Default: `128`.
-  - Serve para calcular o tempo de conversão: cada conversão ≈ `1000/sample_rate` ms.
-  - O programa calcula automaticamente um intervalo de leitura recomendado (sensor interval) com base em `sample_rate` e no número de canais: aproximadamente `channels * (1000/sample_rate + 2ms)`.
-- `calibration_scale` (float): multiplicador aplicado ao valor convertido (ajuste de ganho).
-- `calibration_offset` (float): valor aditivo aplicado após o scale (ajuste de offset).
-- `outputs` (array): lista de saídas; cada item é um objeto:
-  - `type` (string): `console` ou `mqtt`.
-  - `interval_ms` (int, opcional): intervalo de publicação para essa saída em ms. Se omitido, usa o intervalo recomendado calculado a partir de `sample_rate` e `channels`.
-  - `mqtt` (obj, opcional): quando `type == "mqtt"`, contém `server`, `username`, `password`, `client_id`, `topic`.
-- `sensor_type` (string): `real` (ADS1115 via I2C) ou `simulation` (sensor fake para testes).
-- `channels` (array[int]): canais a ler (0..3).
+The table below is the authoritative reference for configuration fields and corresponding CLI flags. Command-line flags override values in the JSON file.
 
-Observações sobre intervals
-- `sample_rate` define quão rápido o ADC converte; o programa agrupa leituras por chamada a `sensor.Read()` — que realiza uma conversão por canal sequencialmente.
-- Cada saída publica o último snapshot de leituras no seu `outputs[].interval_ms`. Se uma saída publicar mais rápido que o sensor, ela reenviará o mesmo snapshot até haver novas leituras.
+### Fields (table)
 
-Flags (mapa rápido)
+| Config (JSON path) | Flag | Description |
+|---|---|---|
+| `i2c_bus` | `-i2c-bus` | I2C bus to use (string). Example: `"2"` → `/dev/i2c-2`. Default: `"2"`. |
+| `i2c_address` | `-i2c-address` | ADS1115 I2C address (decimal or `0x` hex). Default: `0x48` (72). |
+| `sample_rate` | `-sample-rate` | ADS1115 conversion rate in SPS. Supported values: `8,16,32,64,128,250,475,860`. Default: `128`. Used to compute conversion time (~1000/sample_rate ms) and a recommended sensor read interval (≈ channels*(1000/sample_rate + 2ms)). |
+| `calibration_scale` | `-calibration` | Multiplicative calibration factor applied to converted readings. Default: `1.0`. |
+| `calibration_offset` | `-calibration-offset` | Additive calibration offset applied after scaling. Default: `0.0`. |
+| `outputs[].type` | `-outputs` | Output type: `console` or `mqtt`. CLI accepts CSV (e.g. `console,mqtt`) for quick config which creates basic entries. |
+| `outputs[].interval_ms` | `-output-intervals` | Publish interval (ms) for this output. If omitted, a recommended interval is derived from `sample_rate` and channels (approx: channels*(1000/sample_rate + 2ms)). Use `-output-intervals` CSV to set per-output values, e.g. `console=1000,mqtt=5000`. |
+| `outputs[].mqtt.server` | `-mqtt-server` | MQTT broker URL (e.g. `tcp://host:1883`). Applied to all `mqtt` outputs; if none exist and flags provided, a `mqtt` output will be created. |
+| `outputs[].mqtt.username` | `-mqtt-user` | MQTT username (optional). |
+| `outputs[].mqtt.password` | `-mqtt-pass` | MQTT password (optional). |
+| `outputs[].mqtt.client_id` | `-mqtt-client-id` | MQTT client id (optional). |
+| `outputs[].mqtt.topic` | `-mqtt-topic` | Base topic to publish readings under (e.g. `ads1115`). |
+| `sensor_type` | `-sensor-type` | `real` (ADS1115 via I2C) or `simulation` (fake sensor). Default: `real`. |
+| `channels` | `-channels` | CSV or array of channel indices to read (0..3). Default: `0,1,2,3`. |
+| `config` | `-config` | Path to JSON config file. Default: `./config.json` if present. Flags override file values. |
 
-| Config JSON | Flag | Observação |
-|---|---:|---|
-| `i2c_bus` | `-i2c-bus` | Barramento I2C |
-| `i2c_address` | `-i2c-address` | Endereço I2C (decimal ou hex)
-| `sample_rate` | `-sample-rate` | SPS do ADS1115 (valores suportados acima)
-| `calibration_scale` | `-calibration` | Scale multiplicativo
-| `calibration_offset` | `-calibration-offset` | Offset aditivo
-| `outputs[].type` | `-outputs` | CSV de tipos compatível (ex.: `console,mqtt`) — cria entradas básicas
-| `outputs[].interval_ms` | `-output-intervals` | Map CSV `console=1000,mqtt=5000`
-| `outputs[].mqtt.server` | `-mqtt-server` | Broker MQTT (aplicado a todos os mqtt outputs; cria um se necessário)
-| `outputs[].mqtt.username` | `-mqtt-user` | Usuário MQTT
-| `outputs[].mqtt.password` | `-mqtt-pass` | Senha MQTT
-| `outputs[].mqtt.client_id` | `-mqtt-client-id` | Client ID MQTT
-| `outputs[].mqtt.topic` | `-mqtt-topic` | Tópico base MQTT
-| `sensor_type` | `-sensor-type` | `real` ou `simulation`
-| `channels` | `-channels` | Lista de canais (ex.: `0,1,2,3`)
-| (arquivo) `config` | `-config` | Caminho para arquivo JSON (default: `./config.json` se existir)
+## Best practices
 
-Boas práticas / recomendações
-- Para múltiplos canais, escolha `sample_rate` e `outputs[].interval_ms` de forma consistente: garantir `outputs[].interval_ms >= sensor_interval` evita republicações do mesmo snapshot.
-- `128` SPS costuma ser um bom ponto de partida.
+- For multiple channels, ensure `outputs[].interval_ms` is >= sensor read interval (derived from `sample_rate`) to avoid publishing identical snapshots repeatedly.
+- `128` SPS is a good default for most use cases.
 
-Suporte e contribuição
-- Projeto minimalista: abra issues/PRs com sugestões de melhorias, novos outputs ou correções.
+## Wiring
 
+Wiring the battery to the analog sensor (ADS1115)
+
+```
+    +-------------------+
+    |   Li-ion battery  |
+    |      +4.2V max    |
+    +-------------------+
+           |
+           R1 = 10kΩ
+           |
+           +----> AINx (ADS1115)
+           |
+           R2 = 33kΩ
+           |
+          GND
+```
+
+This section shows a simple voltage divider example to scale battery voltage into an ADS1115 input. Adjust resistor values and ADC PGA as needed for your voltage range.
+
+## Contributing
+
+This repository is a minimal starter. Please open issues or PRs to suggest improvements, add outputs, or fix bugs.
