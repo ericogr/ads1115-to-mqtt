@@ -1,13 +1,12 @@
 package config
 
 import (
-	"encoding/json"
-	"flag"
-	"fmt"
-	"math"
-	"os"
-	"strconv"
-	"strings"
+    "encoding/json"
+    "flag"
+    "fmt"
+    "os"
+    "strconv"
+    "strings"
 )
 
 type MQTTConfig struct {
