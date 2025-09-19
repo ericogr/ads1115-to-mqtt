@@ -1,12 +1,12 @@
 package config
 
 import (
-    "encoding/json"
-    "flag"
-    "fmt"
-    "os"
-    "strconv"
-    "strings"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
 )
 
 type MQTTConfig struct {
@@ -63,17 +63,17 @@ func LoadFromFlags() (Config, error) {
 	cfgPath := flag.String("config", "", "Path to JSON config file")
 	flagI2CBus := flag.String("i2c-bus", "", "I2C bus (e.g., '2' -> /dev/i2c-2)")
 	flagI2CAddStr := flag.String("i2c-address", "", "I2C address (decimal or 0x hex)")
-    flagSampleRate := flag.Int("sample-rate", -1, "ADS1115 sample rate (SPS)")
+	flagSampleRate := flag.Int("sample-rate", -1, "ADS1115 sample rate (SPS)")
 	flagOutputs := flag.String("outputs", "", "Comma-separated outputs (console,mqtt)")
 	flagOutputIntervals := flag.String("output-intervals", "", "Comma-separated output intervals e.g. console=1000,mqtt=5000")
 	flagMQTTServer := flag.String("mqtt-server", "", "MQTT server (tcp://host:port)")
 	flagMQTTUser := flag.String("mqtt-user", "", "MQTT username")
 	flagMQTTPass := flag.String("mqtt-pass", "", "MQTT password")
 	flagSensorType := flag.String("sensor-type", "", "sensor type: real|simulation")
-    flagChannelScales := flag.String("channel-scales", "", "Comma-separated per-channel scales e.g. 0=1.0,1=0.98")
-    flagChannelOffsets := flag.String("channel-offsets", "", "Comma-separated per-channel offsets e.g. 0=0.12,1=-0.05")
-    flagChannelSampleRates := flag.String("channel-sample-rates", "", "Comma-separated per-channel sample rates e.g. 0=250,1=128")
-    flagChannelEnabled := flag.String("channel-enabled", "", "Comma-separated per-channel enabled flags e.g. 0=true,1=false")
+	flagChannelScales := flag.String("channel-scales", "", "Comma-separated per-channel scales e.g. 0=1.0,1=0.98")
+	flagChannelOffsets := flag.String("channel-offsets", "", "Comma-separated per-channel offsets e.g. 0=0.12,1=-0.05")
+	flagChannelSampleRates := flag.String("channel-sample-rates", "", "Comma-separated per-channel sample rates e.g. 0=250,1=128")
+	flagChannelEnabled := flag.String("channel-enabled", "", "Comma-separated per-channel enabled flags e.g. 0=true,1=false")
 	flagClientID := flag.String("mqtt-client-id", "", "MQTT client id")
 	flagTopic := flag.String("mqtt-topic", "", "MQTT topic base")
 
@@ -112,7 +112,7 @@ func LoadFromFlags() (Config, error) {
 	if *flagSampleRate != -1 {
 		cfg.SampleRate = *flagSampleRate
 	}
-    // Note: per-channel mappings (scales/offsets) are handled below; global calibration flags were removed in favor of per-channel flags.
+	// Note: per-channel mappings (scales/offsets) are handled below; global calibration flags were removed in favor of per-channel flags.
 	if *flagOutputs != "" {
 		// convert simple CSV of types into structured OutputConfig entries
 		parts := parseCSV(*flagOutputs)
@@ -193,7 +193,7 @@ func LoadFromFlags() (Config, error) {
 	if *flagSensorType != "" {
 		cfg.SensorType = *flagSensorType
 	}
-    // channel enabling is handled via -channel-enabled mapping
+	// channel enabling is handled via -channel-enabled mapping
 
 	// per-channel mappings via flags (override file values)
 	if *flagChannelEnabled != "" {
