@@ -64,20 +64,17 @@ func LoadFromFlags() (Config, error) {
 	cfgPath := flag.String("config", "", "Path to JSON config file")
 	flagI2CBus := flag.String("i2c-bus", "", "I2C bus (e.g., '2' -> /dev/i2c-2)")
 	flagI2CAddStr := flag.String("i2c-address", "", "I2C address (decimal or 0x hex)")
-	flagSampleRate := flag.Int("sample-rate", -1, "ADS1115 sample rate (SPS)")
-	flagCalibration := flag.Float64("calibration", math.NaN(), "Calibration scale factor (multiplier) applied to all channels (overrides channel values)")
-	flagCalOffset := flag.Float64("calibration-offset", math.NaN(), "Calibration offset applied to all channels (overrides channel values)")
+    flagSampleRate := flag.Int("sample-rate", -1, "ADS1115 sample rate (SPS)")
 	flagOutputs := flag.String("outputs", "", "Comma-separated outputs (console,mqtt)")
 	flagOutputIntervals := flag.String("output-intervals", "", "Comma-separated output intervals e.g. console=1000,mqtt=5000")
 	flagMQTTServer := flag.String("mqtt-server", "", "MQTT server (tcp://host:port)")
 	flagMQTTUser := flag.String("mqtt-user", "", "MQTT username")
 	flagMQTTPass := flag.String("mqtt-pass", "", "MQTT password")
 	flagSensorType := flag.String("sensor-type", "", "sensor type: real|simulation")
-	flagChannels := flag.String("channels", "", "Comma-separated channels to enable e.g. 0,1,2,3")
-	flagChannelScales := flag.String("channel-scales", "", "Comma-separated per-channel scales e.g. 0=1.0,1=0.98")
-	flagChannelOffsets := flag.String("channel-offsets", "", "Comma-separated per-channel offsets e.g. 0=0.12,1=-0.05")
-	flagChannelSampleRates := flag.String("channel-sample-rates", "", "Comma-separated per-channel sample rates e.g. 0=250,1=128")
-	flagChannelEnabled := flag.String("channel-enabled", "", "Comma-separated per-channel enabled flags e.g. 0=true,1=false (alternative to -channels)")
+    flagChannelScales := flag.String("channel-scales", "", "Comma-separated per-channel scales e.g. 0=1.0,1=0.98")
+    flagChannelOffsets := flag.String("channel-offsets", "", "Comma-separated per-channel offsets e.g. 0=0.12,1=-0.05")
+    flagChannelSampleRates := flag.String("channel-sample-rates", "", "Comma-separated per-channel sample rates e.g. 0=250,1=128")
+    flagChannelEnabled := flag.String("channel-enabled", "", "Comma-separated per-channel enabled flags e.g. 0=true,1=false")
 	flagClientID := flag.String("mqtt-client-id", "", "MQTT client id")
 	flagTopic := flag.String("mqtt-topic", "", "MQTT topic base")
 
@@ -116,17 +113,7 @@ func LoadFromFlags() (Config, error) {
 	if *flagSampleRate != -1 {
 		cfg.SampleRate = *flagSampleRate
 	}
-	// If calibration flags provided, apply them to all configured channels (override channel values)
-	if !math.IsNaN(*flagCalibration) {
-		for i := range cfg.Channels {
-			cfg.Channels[i].CalibrationScale = *flagCalibration
-		}
-	}
-	if !math.IsNaN(*flagCalOffset) {
-		for i := range cfg.Channels {
-			cfg.Channels[i].CalibrationOffset = *flagCalOffset
-		}
-	}
+    // Note: per-channel mappings (scales/offsets) are handled below; global calibration flags were removed in favor of per-channel flags.
 	if *flagOutputs != "" {
 		// convert simple CSV of types into structured OutputConfig entries
 		parts := parseCSV(*flagOutputs)
@@ -207,20 +194,7 @@ func LoadFromFlags() (Config, error) {
 	if *flagSensorType != "" {
 		cfg.SensorType = *flagSensorType
 	}
-	if *flagChannels != "" {
-		chs, err := parseChannels(*flagChannels)
-		if err != nil {
-			return cfg, err
-		}
-		// enable channels specified by flag
-		for _, c := range chs {
-			for i := range cfg.Channels {
-				if cfg.Channels[i].Channel == c {
-					cfg.Channels[i].Enabled = true
-				}
-			}
-		}
-	}
+    // channel enabling is handled via -channel-enabled mapping
 
 	// per-channel mappings via flags (override file values)
 	if *flagChannelEnabled != "" {
@@ -340,22 +314,7 @@ func parseCSV(s string) []string {
 	return out
 }
 
-func parseChannels(s string) ([]int, error) {
-	parts := strings.Split(s, ",")
-	out := make([]int, 0, len(parts))
-	for _, p := range parts {
-		t := strings.TrimSpace(p)
-		if t == "" {
-			continue
-		}
-		v, err := strconv.Atoi(t)
-		if err != nil {
-			return nil, fmt.Errorf("invalid channel '%s': %w", t, err)
-		}
-		out = append(out, v)
-	}
-	return out, nil
-}
+// parseChannels removed: use -channel-enabled mapping instead of shorthand CSV.
 
 func parseKeyFloatMap(s string) (map[int]float64, error) {
 	out := map[int]float64{}
