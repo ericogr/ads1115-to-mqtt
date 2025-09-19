@@ -1,0 +1,8 @@
+.idea/
+bin/
+*.exe
+*.log
+*.tmp
+.DS_Store
+vendor/
+
