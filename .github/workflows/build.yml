@@ -24,11 +24,6 @@ jobs:
             goos: linux
             goarch: arm64
             ext: ""
-          - name: windows-amd64
-            runs_on: windows-latest
-            goos: windows
-            goarch: amd64
-            ext: ".exe"
           - name: darwin-amd64
             runs_on: macos-latest
             goos: darwin
@@ -93,4 +88,3 @@ jobs:
         with:
           name: ${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}
           path: release/*
-
