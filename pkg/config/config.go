@@ -30,7 +30,7 @@ type ChannelConfig struct {
 	Enabled           bool    `json:"enabled"`
 	SampleRate        int     `json:"sample_rate,omitempty"`
 	CalibrationScale  float64 `json:"calibration_scale,omitempty"`
-	CalibrationOffset float64 `json:"calibration_offset,omitempty"`
+	CalibrationOffset float64 `json:"calibration_offset"`
 }
 
 type Config struct {
