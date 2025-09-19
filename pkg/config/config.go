@@ -32,22 +32,25 @@ type ChannelConfig struct {
 	CalibrationOffset float64 `json:"calibration_offset"`
 }
 
+type I2CConfig struct {
+    Bus     string `json:"bus"`
+    Address int    `json:"address"`
+}
+
 type Config struct {
-	I2CBus     string          `json:"i2c_bus"`
-	I2CAddress int             `json:"i2c_address"`
-	SampleRate int             `json:"sample_rate"`
-	Outputs    []OutputConfig  `json:"outputs"`
-	SensorType string          `json:"sensor_type"`
-	Channels   []ChannelConfig `json:"channels"`
+    I2C        I2CConfig       `json:"i2c"`
+    SampleRate int             `json:"sample_rate"`
+    Outputs    []OutputConfig  `json:"outputs"`
+    SensorType string          `json:"sensor_type"`
+    Channels   []ChannelConfig `json:"channels"`
 }
 
 func DefaultConfig() Config {
-	return Config{
-		I2CBus:     "2",
-		I2CAddress: 0x48,
-		SampleRate: 128,
-		Outputs:    []OutputConfig{{Type: "console"}},
-		SensorType: "real",
+    return Config{
+        I2C:        I2CConfig{Bus: "2", Address: 0x48},
+        SampleRate: 128,
+        Outputs:    []OutputConfig{{Type: "console"}},
+        SensorType: "real",
 		Channels: []ChannelConfig{
 			{Channel: 0, Enabled: false, CalibrationScale: 1.0, CalibrationOffset: 0.0},
 			{Channel: 1, Enabled: false, CalibrationScale: 1.0, CalibrationOffset: 0.0},
@@ -99,16 +102,16 @@ func LoadFromFlags() (Config, error) {
 		}
 	}
 
-	if *flagI2CBus != "" {
-		cfg.I2CBus = *flagI2CBus
-	}
-	if *flagI2CAddStr != "" {
-		v, err := parseIntOrHex(*flagI2CAddStr)
-		if err != nil {
-			return cfg, fmt.Errorf("i2c-address: %w", err)
-		}
-		cfg.I2CAddress = v
-	}
+    if *flagI2CBus != "" {
+        cfg.I2C.Bus = *flagI2CBus
+    }
+    if *flagI2CAddStr != "" {
+        v, err := parseIntOrHex(*flagI2CAddStr)
+        if err != nil {
+            return cfg, fmt.Errorf("i2c-address: %w", err)
+        }
+        cfg.I2C.Address = v
+    }
 	if *flagSampleRate != -1 {
 		cfg.SampleRate = *flagSampleRate
 	}

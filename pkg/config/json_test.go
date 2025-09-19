@@ -6,9 +6,8 @@ import (
 )
 
 func TestUnmarshalConfigJSON(t *testing.T) {
-	js := `{
-        "i2c_bus": "2",
-        "i2c_address": 72,
+    js := `{
+        "i2c": { "bus": "2", "address": 72 },
         "sample_rate": 128,
         "outputs": [{"type":"console"}],
         "sensor_type":"real",
@@ -22,9 +21,9 @@ func TestUnmarshalConfigJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(js), &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if cfg.I2CAddress != 72 {
-		t.Fatalf("i2c address: got %d", cfg.I2CAddress)
-	}
+    if cfg.I2C.Address != 72 {
+        t.Fatalf("i2c address: got %d", cfg.I2C.Address)
+    }
 	if cfg.SampleRate != 128 {
 		t.Fatalf("sample_rate: got %d", cfg.SampleRate)
 	}

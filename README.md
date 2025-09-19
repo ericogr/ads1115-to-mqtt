@@ -40,8 +40,7 @@ make build
 
 ```json
 {
-  "i2c_bus": "2",
-  "i2c_address": 72,
+  "i2c": { "bus": "2", "address": 72 },
   "sample_rate": 128,
   "outputs": [
     { "type": "console" },
@@ -65,8 +64,8 @@ The table below is the authoritative reference for configuration fields and corr
 
 | Config (JSON path) | Flag | Description |
 |---|---|---|
-| `i2c_bus` | `-i2c-bus` | I2C bus to use (string). Example: `"2"` → `/dev/i2c-2`. Default: `"2"`. |
-| `i2c_address` | `-i2c-address` | ADS1115 I2C address (decimal or `0x` hex). Default: `0x48` (72). |
+| `i2c.bus` | `-i2c-bus` | I2C bus to use (string). Example: `"2"` → `/dev/i2c-2`. Default: `"2"`. |
+| `i2c.address` | `-i2c-address` | ADS1115 I2C address (decimal or `0x` hex). Default: `0x48` (72). |
 | `sample_rate` | `-sample-rate` | Global ADS1115 conversion rate in SPS used as a default when a channel doesn't override it. Supported values: `8,16,32,64,128,250,475,860`. Default: `128`. |
 | `channels[]` | `-channel-enabled` | Array of per-channel objects. Use `-channel-enabled` mappings to enable/disable channels (example: `-channel-enabled 0=true,1=false`). See per-field flags below. |
 | `channels[].channel` | (none) | Channel index (0..3). |
