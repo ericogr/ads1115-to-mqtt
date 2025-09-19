@@ -32,11 +32,11 @@ func NewADS1115Sensor(cfg config.Config) (Sensor, error) {
 	if _, err := host.Init(); err != nil {
 		return nil, fmt.Errorf("host init: %w", err)
 	}
-    bus, err := i2creg.Open(cfg.I2C.Bus)
+	bus, err := i2creg.Open(cfg.I2C.Bus)
 	if err != nil {
 		return nil, fmt.Errorf("open i2c: %w", err)
 	}
-    dev := &i2c.Dev{Addr: uint16(cfg.I2C.Address), Bus: bus}
+	dev := &i2c.Dev{Addr: uint16(cfg.I2C.Address), Bus: bus}
 	// build enabled channels list and per-channel maps
 	chans := make([]int, 0)
 	csr := make(map[int]int)

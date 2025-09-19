@@ -41,6 +41,11 @@ func main() {
 	runLoop(cfg, s, outs, sensorIntervalMs)
 }
 
+// Build-time variables injected via -ldflags.
+var Version = "dev"
+var Commit = ""
+var BuildDate = ""
+
 func computeSensorInterval(cfg config.Config) int {
 	perSampleOverhead := 2.0
 	total := 0.0
@@ -184,7 +189,7 @@ func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry, sensorInter
 		}()
 	}
 
-	log.Printf("started; sensor_type=%s sample_rate=%d sensor_interval=%dms outputs=%v", cfg.SensorType, cfg.SampleRate, sensorIntervalMs, cfg.Outputs)
+	log.Printf("started; version=%s commit=%s built=%s; sensor_type=%s sample_rate=%d sensor_interval=%dms outputs=%v", Version, Commit, BuildDate, cfg.SensorType, cfg.SampleRate, sensorIntervalMs, cfg.Outputs)
 
 	// show effective configuration at startup
 	if b, err := json.MarshalIndent(cfg, "", "  "); err == nil {

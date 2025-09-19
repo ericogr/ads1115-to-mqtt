@@ -1,5 +1,9 @@
 {
-    "i2c": { "bus": "2", "address": 72 },
+    "i2c": 
+    {
+        "bus": "2",
+        "address": 72
+ },
     "sample_rate": 128,
     "sensor_type": "simulation",
     "outputs": [

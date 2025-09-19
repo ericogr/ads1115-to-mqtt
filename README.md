@@ -88,7 +88,7 @@ The table below is the authoritative reference for configuration fields and corr
 - For multiple channels, ensure `outputs[].interval_ms` is >= sensor read interval (derived from `sample_rate`) to avoid publishing identical snapshots repeatedly.
 - `128` SPS is a good default for most use cases.
 
-## Wiring
+## Wiring (example)
 
 Wiring the battery to the analog sensor (ADS1115)
 
