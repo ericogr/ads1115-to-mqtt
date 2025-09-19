@@ -1,0 +1,17 @@
+{
+    "i2c_bus": "2",
+    "i2c_address": 72,
+    "sample_rate": 128,
+    "calibration_scale": 1.0,
+    "calibration_offset": 0.0,
+    "outputs": [
+        {
+            "type": "console",
+            "interval_ms": 1000
+        }
+    ],
+    "sensor_type": "real",
+    "channels": [
+        0
+    ]
+}

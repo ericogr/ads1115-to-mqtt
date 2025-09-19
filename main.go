@@ -24,7 +24,10 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	outs, err := initOutputs(cfg)
+	// compute sensor interval based on sample_rate and number of channels
+	sensorIntervalMs := computeSensorInterval(cfg.SampleRate, len(cfg.Channels))
+
+	outs, err := initOutputs(cfg, sensorIntervalMs)
 	if err != nil {
 		log.Fatalf("outputs: %v", err)
 	}
@@ -35,7 +38,18 @@ func main() {
 	}
 	defer s.Close()
 
-	runLoop(cfg, s, outs)
+	runLoop(cfg, s, outs, sensorIntervalMs)
+}
+
+func computeSensorInterval(sampleRate int, channelCount int) int {
+	if sampleRate <= 0 {
+		sampleRate = 128
+	}
+	// conversion time per sample in ms + small overhead
+	perSampleMs := 1000.0 / float64(sampleRate)
+	overheadMs := 2.0
+	total := float64(channelCount) * (perSampleMs + overheadMs)
+	return int(total + 0.5)
 }
 
 // loadConfig loads configuration from flags or a JSON file.
@@ -49,13 +63,13 @@ type outputEntry struct {
 	IntervalMs int
 }
 
-func initOutputs(cfg config.Config) ([]outputEntry, error) {
+func initOutputs(cfg config.Config, sensorIntervalMs int) ([]outputEntry, error) {
 	entries := make([]outputEntry, 0, len(cfg.Outputs))
 	for _, o := range cfg.Outputs {
 		typ := strings.ToLower(o.Type)
 		interval := o.IntervalMs
 		if interval == 0 {
-			interval = cfg.IntervalMs
+			interval = sensorIntervalMs
 		}
 		switch typ {
 		case "console":
@@ -93,7 +107,7 @@ func initSensor(cfg config.Config) (sensor.Sensor, error) {
 }
 
 // runLoop starts the periodic read/publish loop and handles shutdown.
-func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry) {
+func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry, sensorIntervalMs int) {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
@@ -102,7 +116,7 @@ func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry) {
 	var latest []sensor.Reading
 
 	// sensor reader
-	sensorTicker := time.NewTicker(time.Duration(cfg.IntervalMs) * time.Millisecond)
+	sensorTicker := time.NewTicker(time.Duration(sensorIntervalMs) * time.Millisecond)
 	defer sensorTicker.Stop()
 
 	done := make(chan struct{})
@@ -151,7 +165,7 @@ func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry) {
 		}()
 	}
 
-	log.Printf("started; sensor_type=%s outputs=%v interval=%dms", cfg.SensorType, cfg.Outputs, cfg.IntervalMs)
+	log.Printf("started; sensor_type=%s sample_rate=%d sensor_interval=%dms outputs=%v", cfg.SensorType, cfg.SampleRate, sensorIntervalMs, cfg.Outputs)
 
 	// show effective configuration at startup
 	if b, err := json.MarshalIndent(cfg, "", "  "); err == nil {

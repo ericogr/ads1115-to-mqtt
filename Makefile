@@ -14,7 +14,7 @@ build:
 	mkdir -p bin
 	go build -o bin/$(BINARY) -v ./
 
-build-dietpi:
+build-linux-arm64:
 	mkdir -p bin
 	GOOS=linux GOARCH=arm64 go build -o bin/$(BINARY)-linux-arm64 -v ./
 

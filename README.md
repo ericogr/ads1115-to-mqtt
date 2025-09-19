@@ -40,10 +40,16 @@ Config (exemplo `config.json`):
     { "type": "mqtt", "interval_ms": 1000, "mqtt": { "server": "tcp://localhost:1883", "client_id": "ads1115", "topic": "ads1115" } }
   ],
   "sensor_type": "real",
-  "channels": [0,1,2,3],
-  "interval_ms": 1000
+  "channels": [0,1,2,3]
 }
 ```
+
+Observações sobre arquivo de configuração
+
+- Por padrão o programa procura por `config.json` na pasta corrente e carrega se existir.
+- Você pode especificar outro arquivo com `-config /caminho/para/config.json`.
+- Precedência: valores passados via linha de comando (flags) sobrescrevem os valores do arquivo de configuração.
+
 
 Configuration parameters
 
@@ -51,11 +57,11 @@ Configuration parameters
 |---|---|---|
 | `i2c_bus` | `-i2c-bus` | Barramento I2C (ex.: `2` -> `/dev/i2c-2`). |
 | `i2c_address` | `-i2c-address` | Endereço I2C (decimal ou hex, ex.: `0x48`). |
-| `sample_rate` | `-sample-rate` | Taxa de amostragem do ADS1115 em SPS (ex.: `128`). |
+| `sample_rate` | `-sample-rate` | Taxa de amostragem do ADS1115 em SPS. Valores suportados: `8,16,32,64,128,250,475,860`. Default: `128`. |
 | `calibration_scale` | `-calibration` | Fator multiplicativo de calibração aplicado ao valor lido. |
 | `calibration_offset` | `-calibration-offset` | Offset aditivo aplicado após a calibração. |
 | `outputs[].type` | `-outputs` | Tipo da saída: `console` ou `mqtt`. Pode ser uma lista (ex.: `console,mqtt`). |
-| `outputs[].interval_ms` | `-output-intervals` | Intervalo de publicação para esta saída (ms). Quando não informado, usa `interval_ms` global. Use flags como `console=1000,mqtt=5000`.
+| `outputs[].interval_ms` | `-output-intervals` | Intervalo de publicação para esta saída (ms). Quando não informado, usa um intervalo recomendado calculado a partir de `sample_rate` e número de canais (por padrão, aproximadamente channels*(1000/sample_rate+2ms)). Use flags como `console=1000,mqtt=5000`.
 | `outputs[].mqtt.server` | `-mqtt-server` | Endereço do broker MQTT (ex.: `tcp://host:1883`). Aplicado a todos os outputs do tipo `mqtt`; se não houver, um `mqtt` output será criado. |
 | `outputs[].mqtt.username` | `-mqtt-user` | Usuário MQTT (opcional). |
 | `outputs[].mqtt.password` | `-mqtt-pass` | Senha MQTT (opcional). |
@@ -63,5 +69,4 @@ Configuration parameters
 | `outputs[].mqtt.topic` | `-mqtt-topic` | Tópico base para publicação (ex.: `ads1115`). |
 | `sensor_type` | `-sensor-type` | Tipo de sensor: `real` ou `simulation` (fake). |
 | `channels` | `-channels` | Lista de canais a ler (ex.: `0,1,2,3`). |
-| `interval_ms` | `-interval-ms` | Intervalo entre leituras do sensor em milissegundos. |
-| (top-level) `config` | `-config` | Caminho para arquivo JSON de configuração que sobrescreve valores padrão. |
+| (top-level) `config` | `-config` | Caminho para arquivo JSON de configuração. Se não informado, o programa procura por `./config.json` na pasta corrente. Valores passados via flags sobrescrevem o arquivo. |

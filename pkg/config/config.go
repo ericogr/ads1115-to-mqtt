@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"math"
@@ -34,7 +33,6 @@ type Config struct {
 	Outputs           []OutputConfig `json:"outputs"`
 	SensorType        string         `json:"sensor_type"`
 	Channels          []int          `json:"channels"`
-	IntervalMs        int            `json:"interval_ms"`
 }
 
 func DefaultConfig() Config {
@@ -44,10 +42,9 @@ func DefaultConfig() Config {
 		SampleRate:        128,
 		CalibrationScale:  1.0,
 		CalibrationOffset: 0.0,
-		Outputs:           []OutputConfig{{Type: "console", IntervalMs: 1000}},
+		Outputs:           []OutputConfig{{Type: "console"}},
 		SensorType:        "real",
 		Channels:          []int{0, 1, 2, 3},
-		IntervalMs:        1000,
 	}
 }
 
@@ -67,13 +64,19 @@ func LoadFromFlags() (Config, error) {
 	flagMQTTPass := flag.String("mqtt-pass", "", "MQTT password")
 	flagSensorType := flag.String("sensor-type", "", "sensor type: real|simulation")
 	flagChannels := flag.String("channels", "", "Comma-separated channels e.g. 0,1,2,3")
-	flagInterval := flag.Int("interval-ms", -1, "Publish interval in ms")
 	flagClientID := flag.String("mqtt-client-id", "", "MQTT client id")
 	flagTopic := flag.String("mqtt-topic", "", "MQTT topic base")
 
 	flag.Parse()
 
 	cfg := DefaultConfig()
+
+	// If no -config was provided, try to load ./config.json by default
+	if *cfgPath == "" {
+		if _, err := os.Stat("config.json"); err == nil {
+			*cfgPath = "config.json"
+		}
+	}
 
 	if *cfgPath != "" {
 		b, err := os.ReadFile(*cfgPath)
@@ -109,7 +112,7 @@ func LoadFromFlags() (Config, error) {
 		parts := parseCSV(*flagOutputs)
 		outs := make([]OutputConfig, 0, len(parts))
 		for _, p := range parts {
-			outs = append(outs, OutputConfig{Type: p, IntervalMs: cfg.IntervalMs})
+			outs = append(outs, OutputConfig{Type: p})
 		}
 		cfg.Outputs = outs
 	}
@@ -162,7 +165,7 @@ func LoadFromFlags() (Config, error) {
 		}
 		if !applied {
 			// create mqtt output config and apply flags
-			mqttOut := OutputConfig{Type: "mqtt", IntervalMs: cfg.IntervalMs, MQTT: &MQTTConfig{}}
+			mqttOut := OutputConfig{Type: "mqtt", MQTT: &MQTTConfig{}}
 			if *flagMQTTServer != "" {
 				mqttOut.MQTT.Server = *flagMQTTServer
 			}
@@ -191,18 +194,19 @@ func LoadFromFlags() (Config, error) {
 		}
 		cfg.Channels = chs
 	}
-	if *flagInterval != -1 {
-		cfg.IntervalMs = *flagInterval
-	}
-	// ensure outputs have interval default
-	for i := range cfg.Outputs {
-		if cfg.Outputs[i].IntervalMs == 0 {
-			cfg.Outputs[i].IntervalMs = cfg.IntervalMs
+	// NOTE: outputs[].interval_ms defaulting and sensor interval calculation are handled in the caller (main) based on sample_rate and channels
+
+	// validate sample rate
+	allowed := []int{8, 16, 32, 64, 128, 250, 475, 860}
+	valid := false
+	for _, a := range allowed {
+		if cfg.SampleRate == a {
+			valid = true
+			break
 		}
 	}
-
-	if cfg.SampleRate <= 0 {
-		return cfg, errors.New("sample-rate must be > 0")
+	if !valid {
+		return cfg, fmt.Errorf("invalid sample_rate %d; allowed: %v", cfg.SampleRate, allowed)
 	}
 
 	return cfg, nil
