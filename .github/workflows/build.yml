@@ -8,13 +8,17 @@ on:
     branches: [ main ]
     tags: [ 'v*' ]
     paths-ignore:
-      - 'README.md'
-      - 'Makefile'
+    - 'README.md'
+    - 'Makefile'
+    - 'config.json'
+    - 'AGENTS.md'
   pull_request:
     branches: [ main ]
     paths-ignore:
-      - 'README.md'
-      - 'Makefile'
+    - 'README.md'
+    - 'Makefile'
+    - 'config.json'
+    - 'AGENTS.md'
 
 jobs:
   build:
@@ -86,7 +90,8 @@ jobs:
           BUILD_DATE: ${{ env.BUILD_DATE }}
         run: |
           mkdir -p release
-          OUT=release/${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}${{ matrix.ext }}
+          # produce binary named: ads1115-to-mqtt-<os>-<arch> (optional extension via matrix.ext)
+          OUT=release/ads1115-to-mqtt-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
           LDFLAGS="-s -w -X main.Version=${{ env.VERSION }} -X main.Commit=${{ env.COMMIT }} -X main.BuildDate=${{ env.BUILD_DATE }}"
           echo "Building $OUT"
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -ldflags "$LDFLAGS" -o "$OUT" .
@@ -94,7 +99,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.VERSION }}
+          # artifact directory/name used by download-artifact; use ads1115-to-mqtt-<os>-<arch>
+          name: ads1115-to-mqtt-${{ matrix.goos }}-${{ matrix.goarch }}
           path: release/*
 
   publish:
