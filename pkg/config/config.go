@@ -10,11 +10,18 @@ import (
 )
 
 type MQTTConfig struct {
-	Server   string `json:"server"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	ClientID string `json:"client_id"`
-	Topic    string `json:"topic"`
+    Server   string `json:"server"`
+    Username string `json:"username"`
+    Password string `json:"password"`
+    ClientID string `json:"client_id"`
+    // StateTopic is the MQTT topic where the sensor state/value is published.
+    StateTopic string `json:"state_topic"`
+    // DiscoveryTopic is the full topic to publish Home Assistant discovery payload to
+    // (for example: `homeassistant/sensor/machine_battery/config`). If empty, discovery is not published.
+    DiscoveryTopic string `json:"discovery_topic,omitempty"`
+    // Optional discovery payload fields for Home Assistant
+    DiscoveryName     string `json:"discovery_name,omitempty"`
+    DiscoveryUniqueID string `json:"discovery_unique_id,omitempty"`
 }
 
 type OutputConfig struct {
@@ -77,8 +84,11 @@ func LoadFromFlags() (Config, error) {
 	flagChannelOffsets := flag.String("channel-offsets", "", "Comma-separated per-channel offsets e.g. 0=0.12,1=-0.05")
 	flagChannelSampleRates := flag.String("channel-sample-rates", "", "Comma-separated per-channel sample rates e.g. 0=250,1=128")
 	flagChannelEnabled := flag.String("channel-enabled", "", "Comma-separated per-channel enabled flags e.g. 0=true,1=false")
-	flagClientID := flag.String("mqtt-client-id", "", "MQTT client id")
-	flagTopic := flag.String("mqtt-topic", "", "MQTT topic base")
+    flagClientID := flag.String("mqtt-client-id", "", "MQTT client id")
+    flagStateTopic := flag.String("mqtt-state-topic", "", "MQTT state topic to publish readings (e.g. sensors/machine_battery/voltage)")
+    flagDiscoveryTopic := flag.String("mqtt-discovery-topic", "", "MQTT topic to publish Home Assistant discovery payload (full topic)")
+    flagDiscoveryName := flag.String("mqtt-discovery-name", "", "Discovery: sensor name")
+    flagDiscoveryUniqueID := flag.String("mqtt-discovery-unique-id", "", "Discovery: unique_id")
 
 	flag.Parse()
 
@@ -145,8 +155,8 @@ func LoadFromFlags() (Config, error) {
 			}
 		}
 	}
-	// map mqtt flags into the first mqtt output (create if missing)
-	if *flagMQTTServer != "" || *flagMQTTUser != "" || *flagMQTTPass != "" || *flagClientID != "" || *flagTopic != "" {
+    // map mqtt flags into the first mqtt output (create if missing)
+    if *flagMQTTServer != "" || *flagMQTTUser != "" || *flagMQTTPass != "" || *flagClientID != "" || *flagStateTopic != "" || *flagDiscoveryTopic != "" {
 		// Apply MQTT flags to all mqtt outputs; if none exist, create one.
 		applied := false
 		for i := range cfg.Outputs {
@@ -166,13 +176,22 @@ func LoadFromFlags() (Config, error) {
 				if *flagClientID != "" {
 					cfg.Outputs[i].MQTT.ClientID = *flagClientID
 				}
-				if *flagTopic != "" {
-					cfg.Outputs[i].MQTT.Topic = *flagTopic
-				}
-				applied = true
-			}
-		}
-		if !applied {
+                if *flagStateTopic != "" {
+                    cfg.Outputs[i].MQTT.StateTopic = *flagStateTopic
+                }
+                if *flagDiscoveryTopic != "" {
+                    cfg.Outputs[i].MQTT.DiscoveryTopic = *flagDiscoveryTopic
+                }
+                if *flagDiscoveryName != "" {
+                    cfg.Outputs[i].MQTT.DiscoveryName = *flagDiscoveryName
+                }
+                if *flagDiscoveryUniqueID != "" {
+                    cfg.Outputs[i].MQTT.DiscoveryUniqueID = *flagDiscoveryUniqueID
+                }
+                applied = true
+            }
+        }
+        if !applied {
 			// create mqtt output config and apply flags
 			mqttOut := OutputConfig{Type: "mqtt", MQTT: &MQTTConfig{}}
 			if *flagMQTTServer != "" {
@@ -187,12 +206,21 @@ func LoadFromFlags() (Config, error) {
 			if *flagClientID != "" {
 				mqttOut.MQTT.ClientID = *flagClientID
 			}
-			if *flagTopic != "" {
-				mqttOut.MQTT.Topic = *flagTopic
-			}
-			cfg.Outputs = append(cfg.Outputs, mqttOut)
-		}
-	}
+                if *flagStateTopic != "" {
+                    mqttOut.MQTT.StateTopic = *flagStateTopic
+                }
+                if *flagDiscoveryTopic != "" {
+                    mqttOut.MQTT.DiscoveryTopic = *flagDiscoveryTopic
+                }
+                if *flagDiscoveryName != "" {
+                    mqttOut.MQTT.DiscoveryName = *flagDiscoveryName
+                }
+                if *flagDiscoveryUniqueID != "" {
+                    mqttOut.MQTT.DiscoveryUniqueID = *flagDiscoveryUniqueID
+                }
+                cfg.Outputs = append(cfg.Outputs, mqttOut)
+            }
+        }
 	if *flagSensorType != "" {
 		cfg.SensorType = *flagSensorType
 	}

@@ -103,7 +103,7 @@ func initOutputs(cfg *config.Config, sensorIntervalMs int) ([]outputEntry, error
 			if o.MQTT != nil {
 				mqttCfg = *o.MQTT
 			} else {
-				mqttCfg = config.MQTTConfig{Server: "tcp://localhost:1883", ClientID: "ads1115-client", Topic: "ads1115"}
+				mqttCfg = config.MQTTConfig{Server: "tcp://localhost:1883", ClientID: "ads1115-client", StateTopic: "ads1115"}
 			}
 			mo, err := mqttout.NewMQTT(mqttCfg)
 			if err != nil {

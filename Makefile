@@ -4,7 +4,7 @@ BINARY=ads1115-to-mqtt
 
 all: build
 
-RUN_ARGS ?= -outputs console
+RUN_ARGS ?= ""
 
 run:
 	go run ./ $(RUN_ARGS)

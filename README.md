@@ -44,7 +44,7 @@ make build
   "sample_rate": 128,
   "outputs": [
     { "type": "console" },
-    { "type": "mqtt", "mqtt": { "server": "tcp://localhost:1883", "client_id": "ads1115", "topic": "ads1115" } }
+    { "type": "mqtt", "mqtt": { "server": "tcp://localhost:1883", "client_id": "ads1115", "state_topic": "sensors/machine_battery/voltage", "discovery_topic": "homeassistant/sensor/machine_battery/config", "discovery_name": "Li-Ion machine battery", "discovery_unique_id": "machine_battery_lion_01" } }
   ],
   "sensor_type": "real",
   "channels": [
@@ -79,7 +79,8 @@ The table below is the authoritative reference for configuration fields and corr
 | `outputs[].mqtt.username` | `-mqtt-user` | MQTT username (optional). |
 | `outputs[].mqtt.password` | `-mqtt-pass` | MQTT password (optional). |
 | `outputs[].mqtt.client_id` | `-mqtt-client-id` | MQTT client id (optional). |
-| `outputs[].mqtt.topic` | `-mqtt-topic` | Base topic to publish readings under (e.g. `ads1115`). |
+| `outputs[].mqtt.state_topic` | `-mqtt-state-topic` | State topic to publish readings under (e.g. `sensors/machine_battery/voltage`). When using Home Assistant MQTT discovery this value will be used as the `state_topic` in the discovery payload. |
+| `outputs[].mqtt.discovery_topic` | `-mqtt-discovery-topic` | Full MQTT topic where Home Assistant discovery payload will be published (e.g. `homeassistant/sensor/machine_battery/config`). If empty, discovery is not published. |
 | `sensor_type` | `-sensor-type` | `real` (ADS1115 via I2C) or `simulation` (fake sensor). Default: `real`. |
 | `config` | `-config` | Path to JSON config file. Default: `./config.json` if present. Flags override file values. |
 
@@ -108,6 +109,36 @@ Wiring the battery to the analog sensor (ADS1115)
 ```
 
 This section shows a simple voltage divider example to scale battery voltage into an ADS1115 input. Adjust resistor values and ADC PGA as needed for your voltage range.
+
+## Home Assistant integration
+
+The MQTT output can publish a Home Assistant discovery configuration so the sensor is automatically discovered. The discovery message is published to the topic `homeassistant/sensor/<object_id>/config` and should contain a JSON payload like:
+
+```json
+{
+  "name": "Li-Ion machine battery",
+  "state_topic": "sensors/machine_battery/voltage",
+  "unit_of_measurement": "V",
+  "device_class": "voltage",
+  "unique_id": "machine_battery_lion_01"
+}
+```
+
+Value messages are published to the `state_topic` (for example `sensors/machine_battery/voltage`) and should be JSON objects containing the reading. Example payload:
+
+```json
+{ "voltage": 3.72 }
+```
+
+Notes:
+- The topic used for state updates can be configured via `outputs[].mqtt.state_topic` (CLI flag `-mqtt-state-topic`).
+- When discovery is enabled the application will publish the discovery config with the `state_topic` so Home Assistant can read values from that topic.
+ - The discovery topic (where the discovery JSON is published) can be configured via `outputs[].mqtt.discovery_topic` or CLI flag `-mqtt-discovery-topic`.
+ - The topic used for state updates can be configured via `outputs[].mqtt.state_topic` (CLI flag `-mqtt-state-topic`).
+ - When discovery is enabled the application will publish the discovery config with the `state_topic` so Home Assistant can read values from that topic.
+ - The discovery topic (where the discovery JSON is published) can be configured via `outputs[].mqtt.discovery_topic` or CLI flag `-mqtt-discovery-topic`.
+ - Note: `unit_of_measurement` and `device_class` in the discovery payload are fixed to `"V"` and `"voltage"` respectively and are not configurable.
+
 
 ## Contributing
 
