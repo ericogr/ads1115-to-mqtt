@@ -72,6 +72,7 @@ func NewMQTT(cfg config.MQTTConfig, channels []config.ChannelConfig) (output.Out
 					"state_topic":           stateTopic,
 					"unit_of_measurement":   "V",
 					"device_class":          "voltage",
+					"state_class":           "measurement",
 					"value_template":        "{{ value_json.voltage }}",
 					"json_attributes_topic": stateTopic,
 				}
@@ -98,6 +99,7 @@ func NewMQTT(cfg config.MQTTConfig, channels []config.ChannelConfig) (output.Out
 				"state_topic":           m.stateTopic,
 				"unit_of_measurement":   "V",
 				"device_class":          "voltage",
+				"state_class":           "measurement",
 				"value_template":        "{{ value_json.voltage }}",
 				"json_attributes_topic": m.stateTopic,
 			}
