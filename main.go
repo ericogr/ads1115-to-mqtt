@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/signal"
 	"strings"
@@ -81,9 +82,22 @@ func loadConfig() (config.Config, error) {
 }
 
 // initOutputs constructs the configured outputs (console, mqtt, ...).
+
+// channelAgg accumulates values for a single channel until an output consumes them.
+type channelAgg struct {
+	Sum    float64
+	RawSum int64
+	Count  int
+	Last   time.Time
+}
+
+// outputEntry holds per-output accumulators so each output can compute its own averages
+// and reset them after publishing.
 type outputEntry struct {
 	Out        output.Output
 	IntervalMs int
+	mu         sync.Mutex
+	aggs       map[int]*channelAgg
 }
 
 func initOutputs(cfg *config.Config, sensorIntervalMs int) ([]outputEntry, error) {
@@ -97,7 +111,7 @@ func initOutputs(cfg *config.Config, sensorIntervalMs int) ([]outputEntry, error
 		interval := o.IntervalMs
 		switch typ {
 		case "console":
-			entries = append(entries, outputEntry{Out: console.NewConsole(), IntervalMs: interval})
+			entries = append(entries, outputEntry{Out: console.NewConsole(), IntervalMs: interval, aggs: make(map[int]*channelAgg)})
 		case "mqtt":
 			var mqttCfg config.MQTTConfig
 			if o.MQTT != nil {
@@ -109,7 +123,60 @@ func initOutputs(cfg *config.Config, sensorIntervalMs int) ([]outputEntry, error
 			if err != nil {
 				return nil, fmt.Errorf("mqtt init: %w", err)
 			}
-			entries = append(entries, outputEntry{Out: mo, IntervalMs: interval})
+			entries = append(entries, outputEntry{Out: mo, IntervalMs: interval, aggs: make(map[int]*channelAgg)})
+			// If discovery topic contains a %d formatter we publish per-channel discovery
+			// messages here because NewMQTT only publishes a single discovery when the
+			// discovery topic is a literal.
+			if mqttCfg.DiscoveryTopic != "" && strings.Contains(mqttCfg.DiscoveryTopic, "%d") {
+				if mm, ok := mo.(*mqttout.MQTTOutput); ok {
+					for _, ch := range cfg.Channels {
+						if !ch.Enabled {
+							continue
+						}
+						dTopic := fmt.Sprintf(mqttCfg.DiscoveryTopic, ch.Channel)
+						// determine state_topic for this channel
+						var stateTopic string
+						if mqttCfg.StateTopic != "" {
+							if strings.Contains(mqttCfg.StateTopic, "%d") {
+								stateTopic = fmt.Sprintf(mqttCfg.StateTopic, ch.Channel)
+							} else {
+								stateTopic = mqttCfg.StateTopic
+							}
+						} else {
+							stateTopic = fmt.Sprintf("ads1115/channel/%d", ch.Channel)
+						}
+						// build discovery payload
+						name := mqttCfg.DiscoveryName
+						if name == "" {
+							name = fmt.Sprintf("ADS1115 %s", mqttCfg.ClientID)
+						}
+						name = fmt.Sprintf("%s ch%d", name, ch.Channel)
+						uniqueID := mqttCfg.DiscoveryUniqueID
+						if uniqueID == "" {
+							uniqueID = mqttCfg.ClientID
+						}
+						if uniqueID != "" {
+							uniqueID = fmt.Sprintf("%s_%d", uniqueID, ch.Channel)
+						}
+						payload := map[string]interface{}{
+							"name":                  name,
+							"state_topic":           stateTopic,
+							"unit_of_measurement":   "V",
+							"device_class":          "voltage",
+							"value_template":        "{{ value_json.voltage }}",
+							"json_attributes_topic": stateTopic,
+						}
+						if uniqueID != "" {
+							payload["unique_id"] = uniqueID
+						}
+						if b, err := json.Marshal(payload); err == nil {
+							_ = mm.PublishRaw(dTopic, b, true)
+						}
+					}
+				} else {
+					log.Printf("warning: mqtt output not of expected concrete type; cannot publish per-channel discovery")
+				}
+			}
 		default:
 			log.Printf("warning: unknown output '%s', ignoring", o.Type)
 		}
@@ -135,9 +202,7 @@ func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry, sensorInter
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	// latest readings protected by mutex
-	var mu sync.RWMutex
-	var latest []sensor.Reading
+	// no global latest snapshot needed; each output aggregates values independently
 
 	// sensor reader
 	sensorTicker := time.NewTicker(time.Duration(sensorIntervalMs) * time.Millisecond)
@@ -154,28 +219,56 @@ func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry, sensorInter
 					log.Printf("read error: %v", err)
 					continue
 				}
-				mu.Lock()
-				latest = readings
-				mu.Unlock()
+				// update per-output aggregators
+				// update per-output aggregators
+				for i := range outs {
+					entry := &outs[i]
+					entry.mu.Lock()
+					for _, r := range readings {
+						a, ok := entry.aggs[r.Channel]
+						if !ok || a == nil {
+							a = &channelAgg{}
+							entry.aggs[r.Channel] = a
+						}
+						a.Sum += r.Value
+						a.RawSum += int64(r.Raw)
+						a.Count++
+						if r.Timestamp.After(a.Last) {
+							a.Last = r.Timestamp
+						}
+					}
+					entry.mu.Unlock()
+				}
 			case <-done:
 				return
 			}
 		}
 	}()
 
-	// start output goroutines
-	for _, e := range outs {
-		entry := e
-		go func() {
+	// start output goroutines; each output consumes its own aggregated values at its interval
+	for i := range outs {
+		entry := &outs[i]
+		go func(entry *outputEntry) {
 			ticker := time.NewTicker(time.Duration(entry.IntervalMs) * time.Millisecond)
 			defer ticker.Stop()
 			for {
 				select {
 				case <-ticker.C:
-					mu.RLock()
-					snapshot := make([]sensor.Reading, len(latest))
-					copy(snapshot, latest)
-					mu.RUnlock()
+					// build snapshot from accumulated averages
+					entry.mu.Lock()
+					snapshot := make([]sensor.Reading, 0, len(entry.aggs))
+					for ch, a := range entry.aggs {
+						if a == nil || a.Count == 0 {
+							continue
+						}
+						avg := a.Sum / float64(a.Count)
+						avgRawF := float64(a.RawSum) / float64(a.Count)
+						avgRaw := int16(math.Round(avgRawF))
+						snapshot = append(snapshot, sensor.Reading{Channel: ch, Raw: avgRaw, Value: avg, Timestamp: a.Last})
+						// reset aggregator for this channel
+						delete(entry.aggs, ch)
+					}
+					entry.mu.Unlock()
 					if len(snapshot) == 0 {
 						continue
 					}
@@ -186,7 +279,7 @@ func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry, sensorInter
 					return
 				}
 			}
-		}()
+		}(entry)
 	}
 
 	log.Printf("started; version=%s commit=%s built=%s; sensor_type=%s sample_rate=%d sensor_interval=%dms outputs=%v", Version, Commit, BuildDate, cfg.SensorType, cfg.SampleRate, sensorIntervalMs, cfg.Outputs)
