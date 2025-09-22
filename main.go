@@ -119,64 +119,11 @@ func initOutputs(cfg *config.Config, sensorIntervalMs int) ([]outputEntry, error
 			} else {
 				mqttCfg = config.MQTTConfig{Server: "tcp://localhost:1883", ClientID: "ads1115-client", StateTopic: "ads1115"}
 			}
-			mo, err := mqttout.NewMQTT(mqttCfg)
+			mo, err := mqttout.NewMQTT(mqttCfg, cfg.Channels)
 			if err != nil {
 				return nil, fmt.Errorf("mqtt init: %w", err)
 			}
 			entries = append(entries, outputEntry{Out: mo, IntervalMs: interval, aggs: make(map[int]*channelAgg)})
-			// If discovery topic contains a %d formatter we publish per-channel discovery
-			// messages here because NewMQTT only publishes a single discovery when the
-			// discovery topic is a literal.
-			if mqttCfg.DiscoveryTopic != "" && strings.Contains(mqttCfg.DiscoveryTopic, "%d") {
-				if mm, ok := mo.(*mqttout.MQTTOutput); ok {
-					for _, ch := range cfg.Channels {
-						if !ch.Enabled {
-							continue
-						}
-						dTopic := fmt.Sprintf(mqttCfg.DiscoveryTopic, ch.Channel)
-						// determine state_topic for this channel
-						var stateTopic string
-						if mqttCfg.StateTopic != "" {
-							if strings.Contains(mqttCfg.StateTopic, "%d") {
-								stateTopic = fmt.Sprintf(mqttCfg.StateTopic, ch.Channel)
-							} else {
-								stateTopic = mqttCfg.StateTopic
-							}
-						} else {
-							stateTopic = fmt.Sprintf("ads1115/channel/%d", ch.Channel)
-						}
-						// build discovery payload
-						name := mqttCfg.DiscoveryName
-						if name == "" {
-							name = fmt.Sprintf("ADS1115 %s", mqttCfg.ClientID)
-						}
-						name = fmt.Sprintf("%s ch%d", name, ch.Channel)
-						uniqueID := mqttCfg.DiscoveryUniqueID
-						if uniqueID == "" {
-							uniqueID = mqttCfg.ClientID
-						}
-						if uniqueID != "" {
-							uniqueID = fmt.Sprintf("%s_%d", uniqueID, ch.Channel)
-						}
-						payload := map[string]interface{}{
-							"name":                  name,
-							"state_topic":           stateTopic,
-							"unit_of_measurement":   "V",
-							"device_class":          "voltage",
-							"value_template":        "{{ value_json.voltage }}",
-							"json_attributes_topic": stateTopic,
-						}
-						if uniqueID != "" {
-							payload["unique_id"] = uniqueID
-						}
-						if b, err := json.Marshal(payload); err == nil {
-							_ = mm.PublishRaw(dTopic, b, true)
-						}
-					}
-				} else {
-					log.Printf("warning: mqtt output not of expected concrete type; cannot publish per-channel discovery")
-				}
-			}
 		default:
 			log.Printf("warning: unknown output '%s', ignoring", o.Type)
 		}

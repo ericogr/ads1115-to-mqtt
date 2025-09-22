@@ -17,7 +17,7 @@ type MQTTOutput struct {
 	discoveryTopic string
 }
 
-func NewMQTT(cfg config.MQTTConfig) (output.Output, error) {
+func NewMQTT(cfg config.MQTTConfig, channels []config.ChannelConfig) (output.Output, error) {
 	opts := mqtt.NewClientOptions().AddBroker(cfg.Server).SetClientID(cfg.ClientID)
 	if cfg.Username != "" {
 		opts.SetUsername(cfg.Username)
@@ -34,36 +34,80 @@ func NewMQTT(cfg config.MQTTConfig) (output.Output, error) {
 	st := cfg.StateTopic
 	m := &MQTTOutput{client: client, stateTopic: st, discoveryTopic: cfg.DiscoveryTopic}
 
-	// Publish Home Assistant discovery payload if requested.
-	// If the discovery topic contains a %d formatter it will be treated as a per-channel
-	// template and the caller (who has channel information) will publish per-channel
-	// discovery messages. Here we only publish a single discovery if discoveryTopic is
-	// provided and does NOT contain a %d formatter.
-	if m.discoveryTopic != "" && !strings.Contains(m.discoveryTopic, "%d") {
-		// build discovery payload using available fields
-		name := cfg.DiscoveryName
-		if name == "" {
-			name = fmt.Sprintf("ADS1115 %s", cfg.ClientID)
-		}
-		uniqueID := cfg.DiscoveryUniqueID
-		if uniqueID == "" {
-			uniqueID = cfg.ClientID
-		}
-		payload := map[string]interface{}{
-			"name":                  name,
-			"state_topic":           m.stateTopic,
-			"unit_of_measurement":   "V",
-			"device_class":          "voltage",
-			"value_template":        "{{ value_json.voltage }}",
-			"json_attributes_topic": m.stateTopic,
-		}
-		if uniqueID != "" {
-			payload["unique_id"] = uniqueID
-		}
-		if b, err := json.Marshal(payload); err == nil {
-			// discovery should be retained so Home Assistant can see it when it (re)starts
-			token := client.Publish(m.discoveryTopic, 0, true, b)
-			token.Wait()
+	// Publish Home Assistant discovery payload(s) if requested
+	if m.discoveryTopic != "" {
+		// If discoveryTopic contains %d, publish per-channel discovery entries.
+		if strings.Contains(m.discoveryTopic, "%d") {
+			for _, ch := range channels {
+				if !ch.Enabled {
+					continue
+				}
+				dTopic := fmt.Sprintf(cfg.DiscoveryTopic, ch.Channel)
+				// determine state_topic for this channel
+				var stateTopic string
+				if cfg.StateTopic != "" {
+					if strings.Contains(cfg.StateTopic, "%d") {
+						stateTopic = fmt.Sprintf(cfg.StateTopic, ch.Channel)
+					} else {
+						stateTopic = cfg.StateTopic
+					}
+				} else {
+					stateTopic = fmt.Sprintf("ads1115/channel/%d", ch.Channel)
+				}
+				// build discovery payload
+				name := cfg.DiscoveryName
+				if name == "" {
+					name = fmt.Sprintf("ADS1115 %s", cfg.ClientID)
+				}
+				name = fmt.Sprintf("%s ch%d", name, ch.Channel)
+				uniqueID := cfg.DiscoveryUniqueID
+				if uniqueID == "" {
+					uniqueID = cfg.ClientID
+				}
+				if uniqueID != "" {
+					uniqueID = fmt.Sprintf("%s_%d", uniqueID, ch.Channel)
+				}
+				payload := map[string]interface{}{
+					"name":                  name,
+					"state_topic":           stateTopic,
+					"unit_of_measurement":   "V",
+					"device_class":          "voltage",
+					"value_template":        "{{ value_json.voltage }}",
+					"json_attributes_topic": stateTopic,
+				}
+				if uniqueID != "" {
+					payload["unique_id"] = uniqueID
+				}
+				if b, err := json.Marshal(payload); err == nil {
+					token := client.Publish(dTopic, 0, true, b)
+					token.Wait()
+				}
+			}
+		} else {
+			// single discovery entry (no per-channel formatting)
+			name := cfg.DiscoveryName
+			if name == "" {
+				name = fmt.Sprintf("ADS1115 %s", cfg.ClientID)
+			}
+			uniqueID := cfg.DiscoveryUniqueID
+			if uniqueID == "" {
+				uniqueID = cfg.ClientID
+			}
+			payload := map[string]interface{}{
+				"name":                  name,
+				"state_topic":           m.stateTopic,
+				"unit_of_measurement":   "V",
+				"device_class":          "voltage",
+				"value_template":        "{{ value_json.voltage }}",
+				"json_attributes_topic": m.stateTopic,
+			}
+			if uniqueID != "" {
+				payload["unique_id"] = uniqueID
+			}
+			if b, err := json.Marshal(payload); err == nil {
+				token := client.Publish(m.discoveryTopic, 0, true, b)
+				token.Wait()
+			}
 		}
 	}
 
