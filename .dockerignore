@@ -1,0 +1,15 @@
+.git
+.github
+bin
+release
+.modcache
+.gocache
+.cache
+node_modules
+*.md
+*.log
+tmp
+README.md
+config.json
+config.mqtt.json
+

@@ -33,6 +33,11 @@ make build
 ./bin/ads1115-to-mqtt -outputs console,mqtt -output-intervals console=1000,mqtt=5000 -mqtt-server tcp://broker:1883
 ```
 
+### Run container (example)
+
+```
+docker run --rm -it --name ads1115-to-mqtt -v "$(pwd)/config.json":/config.json:ro ericogr/ads1115-to-mqtt:latest -config /config.json
+```
 
 ## Configuration
 
@@ -112,15 +117,17 @@ This section shows a simple voltage divider example to scale battery voltage int
 
 ## Home Assistant integration
 
-The MQTT output can publish a Home Assistant discovery configuration so the sensor is automatically discovered. The discovery message is published to the topic `homeassistant/sensor/<object_id>/config` and should contain a JSON payload like:
+The MQTT output can publish a Home Assistant discovery configuration so the sensor is automatically discovered. The discovery message is published to the topic `homeassistant/sensor/<<object_id>>/config` and should contain a JSON payload like:
 
 ```json
 {
-  "name": "Li-Ion machine battery",
-  "state_topic": "sensors/machine_battery/voltage",
+  "name": "<<name>>",
+  "state_topic": "<<stateTopic>>",
   "unit_of_measurement": "V",
   "device_class": "voltage",
-  "unique_id": "machine_battery_lion_01"
+  "state_class": "measurement",
+  "value_template": "{{ value_json.voltage }}",
+  "json_attributes_topic": "<<stateTopic>>",
 }
 ```
 
@@ -138,7 +145,6 @@ Notes:
  - When discovery is enabled the application will publish the discovery config with the `state_topic` so Home Assistant can read values from that topic.
  - The discovery topic (where the discovery JSON is published) can be configured via `outputs[].mqtt.discovery_topic` or CLI flag `-mqtt-discovery-topic`.
  - Note: `unit_of_measurement` and `device_class` in the discovery payload are fixed to `"V"` and `"voltage"` respectively and are not configurable.
-
 
 ## Contributing
 

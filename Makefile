@@ -1,6 +1,14 @@
+
 .PHONY: all build build-dietpi build-linux build-windows clean
 
 BINARY=ads1115-to-mqtt
+
+# Docker image settings (override as needed)
+DOCKER_IMAGE ?= ericogr/ads1115-to-mqtt
+DOCKER_PLATFORMS ?= linux/amd64,linux/arm64
+VERSION ?= latest
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo '')
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 all: build
 
@@ -32,3 +40,18 @@ clean:
 .PHONY: test
 test:
 	GOCACHE=/tmp/gocache go test ./...
+
+# Docker related targets
+.PHONY: docker-build docker-buildx
+docker-build:
+	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_DATE=$(BUILD_DATE) -t $(DOCKER_IMAGE):$(VERSION) .
+
+docker-buildx:
+	@echo "Building multi-platform image for $(DOCKER_PLATFORMS)"
+	docker buildx build --platform $(DOCKER_PLATFORMS) --push \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t $(DOCKER_IMAGE):$(VERSION) \
+		-t $(DOCKER_IMAGE):latest \
+		.

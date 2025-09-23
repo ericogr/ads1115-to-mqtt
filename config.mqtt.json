@@ -1,25 +1,30 @@
 {
-    "i2c": 
+  "i2c": {
+    "bus": "2",
+    "address": 72
+  },
+  "sample_rate": 128,
+  "sensor_type": "real",
+  "outputs": [
     {
-        "bus": "2",
-        "address": 72
- },
-    "sample_rate": 128,
-    "sensor_type": "simulation",
-    "outputs": [
-        {
-            "type": "console",
-            "interval_ms": 1000
-        },
-        {
-            "type": "mqtt",
-            "mqtt": {
-                "server": "tcp://localhost:1883"
-            }
-        }
-    ],
-    "channels": [
-        { "channel": 0, "enabled": true,  "calibration_scale": 1.0, "calibration_offset": 0.0 },
-        { "channel": 1, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 }
-    ]
+      "type": "console",
+      "interval_ms": 1000
+    },
+    {
+      "type": "mqtt",
+      "interval_ms": 5000,
+      "mqtt": {
+        "server": "tcp://localhost:1883",
+        "client_id": "ads1115-client",
+        "state_topic": "ads1115/channel/%d",
+        "discovery_topic": "homeassistant/sensor/machine_battery_ch%d/config",
+        "discovery_name": "Machine battery",
+        "discovery_unique_id": "machine_battery"
+      }
+    }
+  ],
+  "channels": [
+    { "channel": 0, "enabled": true,  "calibration_scale": 1.53, "calibration_offset": 0.0 },
+    { "channel": 1, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 }
+  ]
 }
