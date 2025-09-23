@@ -111,19 +111,19 @@ func initOutputs(cfg *config.Config, sensorIntervalMs int) ([]outputEntry, error
 		interval := o.IntervalMs
 		switch typ {
 		case "console":
-			entries = append(entries, outputEntry{Out: console.NewConsole(), IntervalMs: interval, aggs: make(map[int]*channelAgg)})
+			entries = append(entries, makeOutputEntry(console.NewConsole(), interval))
 		case "mqtt":
 			var mqttCfg config.MQTTConfig
 			if o.MQTT != nil {
 				mqttCfg = *o.MQTT
 			} else {
-				mqttCfg = config.MQTTConfig{Server: "tcp://localhost:1883", ClientID: "ads1115-client", StateTopic: "ads1115"}
+				mqttCfg = config.MQTTConfig{Server: mqttout.DefaultServer, ClientID: mqttout.DefaultClientID, StateTopic: mqttout.DefaultStateTopic}
 			}
 			mo, err := mqttout.NewMQTT(mqttCfg, cfg.Channels)
 			if err != nil {
 				return nil, fmt.Errorf("mqtt init: %w", err)
 			}
-			entries = append(entries, outputEntry{Out: mo, IntervalMs: interval, aggs: make(map[int]*channelAgg)})
+			entries = append(entries, makeOutputEntry(mo, interval))
 		default:
 			log.Printf("warning: unknown output '%s', ignoring", o.Type)
 		}
@@ -132,6 +132,11 @@ func initOutputs(cfg *config.Config, sensorIntervalMs int) ([]outputEntry, error
 		return nil, fmt.Errorf("no outputs configured")
 	}
 	return entries, nil
+}
+
+// makeOutputEntry creates a new outputEntry with initialized aggregators.
+func makeOutputEntry(o output.Output, interval int) outputEntry {
+	return outputEntry{Out: o, IntervalMs: interval, aggs: make(map[int]*channelAgg)}
 }
 
 // initSensor creates a sensor implementation (real ADS1115 or fake simulator).
@@ -151,83 +156,10 @@ func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry, sensorInter
 
 	// no global latest snapshot needed; each output aggregates values independently
 
-	// sensor reader
-	sensorTicker := time.NewTicker(time.Duration(sensorIntervalMs) * time.Millisecond)
-	defer sensorTicker.Stop()
-
 	done := make(chan struct{})
-
-	go func() {
-		for {
-			select {
-			case <-sensorTicker.C:
-				readings, err := s.Read()
-				if err != nil {
-					log.Printf("read error: %v", err)
-					continue
-				}
-				// update per-output aggregators
-				// update per-output aggregators
-				for i := range outs {
-					entry := &outs[i]
-					entry.mu.Lock()
-					for _, r := range readings {
-						a, ok := entry.aggs[r.Channel]
-						if !ok || a == nil {
-							a = &channelAgg{}
-							entry.aggs[r.Channel] = a
-						}
-						a.Sum += r.Value
-						a.RawSum += int64(r.Raw)
-						a.Count++
-						if r.Timestamp.After(a.Last) {
-							a.Last = r.Timestamp
-						}
-					}
-					entry.mu.Unlock()
-				}
-			case <-done:
-				return
-			}
-		}
-	}()
-
-	// start output goroutines; each output consumes its own aggregated values at its interval
-	for i := range outs {
-		entry := &outs[i]
-		go func(entry *outputEntry) {
-			ticker := time.NewTicker(time.Duration(entry.IntervalMs) * time.Millisecond)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					// build snapshot from accumulated averages
-					entry.mu.Lock()
-					snapshot := make([]sensor.Reading, 0, len(entry.aggs))
-					for ch, a := range entry.aggs {
-						if a == nil || a.Count == 0 {
-							continue
-						}
-						avg := a.Sum / float64(a.Count)
-						avgRawF := float64(a.RawSum) / float64(a.Count)
-						avgRaw := int16(math.Round(avgRawF))
-						snapshot = append(snapshot, sensor.Reading{Channel: ch, Raw: avgRaw, Value: avg, Timestamp: a.Last})
-						// reset aggregator for this channel
-						delete(entry.aggs, ch)
-					}
-					entry.mu.Unlock()
-					if len(snapshot) == 0 {
-						continue
-					}
-					if err := entry.Out.Publish(snapshot); err != nil {
-						log.Printf("output publish error: %v", err)
-					}
-				case <-done:
-					return
-				}
-			}
-		}(entry)
-	}
+	// start sensor reader and output workers
+	startSensorReader(s, outs, sensorIntervalMs, done)
+	startOutputWorkers(outs, done)
 
 	log.Printf("started; version=%s commit=%s built=%s; sensor_type=%s sample_rate=%d sensor_interval=%dms outputs=%v", Version, Commit, BuildDate, cfg.SensorType, cfg.SampleRate, sensorIntervalMs, cfg.Outputs)
 
@@ -242,4 +174,92 @@ func runLoop(cfg config.Config, s sensor.Sensor, outs []outputEntry, sensorInter
 	for _, e := range outs {
 		_ = e.Out.Close()
 	}
+}
+
+// startSensorReader starts a goroutine that periodically reads from the sensor
+// and updates per-output aggregators.
+func startSensorReader(s sensor.Sensor, outs []outputEntry, sensorIntervalMs int, done <-chan struct{}) {
+	ticker := time.NewTicker(time.Duration(sensorIntervalMs) * time.Millisecond)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				readings, err := s.Read()
+				if err != nil {
+					log.Printf("read error: %v", err)
+					continue
+				}
+				for i := range outs {
+					updateEntryWithReadings(&outs[i], readings)
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+}
+
+// updateEntryWithReadings applies readings into the given entry's aggregators.
+func updateEntryWithReadings(entry *outputEntry, readings []sensor.Reading) {
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	for _, r := range readings {
+		a, ok := entry.aggs[r.Channel]
+		if !ok || a == nil {
+			a = &channelAgg{}
+			entry.aggs[r.Channel] = a
+		}
+		a.Sum += r.Value
+		a.RawSum += int64(r.Raw)
+		a.Count++
+		if r.Timestamp.After(a.Last) {
+			a.Last = r.Timestamp
+		}
+	}
+}
+
+// startOutputWorkers starts a goroutine per output that publishes aggregated
+// snapshots at the configured interval.
+func startOutputWorkers(outs []outputEntry, done <-chan struct{}) {
+	for i := range outs {
+		entry := &outs[i]
+		go func(entry *outputEntry) {
+			ticker := time.NewTicker(time.Duration(entry.IntervalMs) * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					snapshot := buildSnapshotAndReset(entry)
+					if len(snapshot) == 0 {
+						continue
+					}
+					if err := entry.Out.Publish(snapshot); err != nil {
+						log.Printf("output publish error: %v", err)
+					}
+				case <-done:
+					return
+				}
+			}
+		}(entry)
+	}
+}
+
+// buildSnapshotAndReset builds an average snapshot from the entry aggregators
+// and resets them for the next interval.
+func buildSnapshotAndReset(entry *outputEntry) []sensor.Reading {
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	snapshot := make([]sensor.Reading, 0, len(entry.aggs))
+	for ch, a := range entry.aggs {
+		if a == nil || a.Count == 0 {
+			continue
+		}
+		avg := a.Sum / float64(a.Count)
+		avgRawF := float64(a.RawSum) / float64(a.Count)
+		avgRaw := int16(math.Round(avgRawF))
+		snapshot = append(snapshot, sensor.Reading{Channel: ch, Raw: avgRaw, Value: avg, Timestamp: a.Last})
+		delete(entry.aggs, ch)
+	}
+	return snapshot
 }

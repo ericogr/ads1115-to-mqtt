@@ -16,17 +16,8 @@ type FakeSensor struct {
 }
 
 func NewFakeSensor(cfg config.Config) (Sensor, error) {
-	chans := make([]int, 0)
-	scales := make(map[int]float64)
-	offs := make(map[int]float64)
-	for _, c := range cfg.Channels {
-		scales[c.Channel] = c.CalibrationScale
-		offs[c.Channel] = c.CalibrationOffset
-		if c.Enabled {
-			chans = append(chans, c.Channel)
-		}
-	}
-	return &FakeSensor{channels: chans, channelScales: scales, channelOffsets: offs}, nil
+    chans, scales, offs, _ := buildChannelSettings(cfg)
+    return &FakeSensor{channels: chans, channelScales: scales, channelOffsets: offs}, nil
 }
 
 func (f *FakeSensor) Read() ([]Reading, error) {

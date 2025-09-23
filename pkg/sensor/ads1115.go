@@ -15,6 +15,13 @@ const (
 	pointerConfig = 0x01
 )
 
+var (
+	// mapping for single-ended mux values per channel
+	muxMap = map[int]byte{0: 0x4, 1: 0x5, 2: 0x6, 3: 0x7}
+	// data rate bits mapping
+	drMap = map[int]byte{8: 0x0, 16: 0x1, 32: 0x2, 64: 0x3, 128: 0x4, 250: 0x5, 475: 0x6, 860: 0x7}
+)
+
 type ADS1115Sensor struct {
 	dev      *i2c.Dev
 	bus      i2c.BusCloser
@@ -37,22 +44,8 @@ func NewADS1115Sensor(cfg config.Config) (Sensor, error) {
 		return nil, fmt.Errorf("open i2c: %w", err)
 	}
 	dev := &i2c.Dev{Addr: uint16(cfg.I2C.Address), Bus: bus}
-	// build enabled channels list and per-channel maps
-	chans := make([]int, 0)
-	csr := make(map[int]int)
-	cscale := make(map[int]float64)
-	coff := make(map[int]float64)
-	for _, c := range cfg.Channels {
-		cscale[c.Channel] = c.CalibrationScale
-		coff[c.Channel] = c.CalibrationOffset
-		if c.SampleRate != 0 {
-			csr[c.Channel] = c.SampleRate
-		}
-		if c.Enabled {
-			chans = append(chans, c.Channel)
-		}
-	}
-	return &ADS1115Sensor{dev: dev, bus: bus, channels: chans, defaultSampleRate: cfg.SampleRate, channelSampleRates: csr, channelScales: cscale, channelOffsets: coff, pgaFS: 4.096}, nil
+    chans, cscale, coff, csr := buildChannelSettings(cfg)
+    return &ADS1115Sensor{dev: dev, bus: bus, channels: chans, defaultSampleRate: cfg.SampleRate, channelSampleRates: csr, channelScales: cscale, channelOffsets: coff, pgaFS: 4.096}, nil
 }
 
 func (s *ADS1115Sensor) Close() error {
@@ -106,42 +99,15 @@ func (s *ADS1115Sensor) Read() ([]Reading, error) {
 }
 
 func (s *ADS1115Sensor) configForChannel(channel int, sampleRate int) (byte, byte, error) {
-	var mux byte
-	switch channel {
-	case 0:
-		mux = 0x4
-	case 1:
-		mux = 0x5
-	case 2:
-		mux = 0x6
-	case 3:
-		mux = 0x7
-	default:
+	mux, ok := muxMap[channel]
+	if !ok {
 		return 0, 0, fmt.Errorf("invalid channel %d", channel)
 	}
 	// PGA: use ±4.096V -> bits 001
 	pga := byte(0x1)
-	// data rate bits
-	var dr byte
-	switch sampleRate {
-	case 8:
-		dr = 0x0
-	case 16:
-		dr = 0x1
-	case 32:
-		dr = 0x2
-	case 64:
-		dr = 0x3
-	case 128:
-		dr = 0x4
-	case 250:
-		dr = 0x5
-	case 475:
-		dr = 0x6
-	case 860:
-		dr = 0x7
-	default:
-		dr = 0x4
+	dr, ok := drMap[sampleRate]
+	if !ok {
+		dr = drMap[128]
 	}
 	var config uint16 = 0x8000 // OS = 1 (start single conversion)
 	config |= uint16(mux) << 12

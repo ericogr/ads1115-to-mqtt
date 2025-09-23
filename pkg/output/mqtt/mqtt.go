@@ -12,6 +12,27 @@ import (
 	"github.com/ericogr/ads1115-to-mqtt/pkg/sensor"
 )
 
+const (
+	// defaults
+	DefaultServer      = "tcp://localhost:1883"
+	DefaultClientID    = "ads1115-client"
+	DefaultStateTopic  = "ads1115"
+	perChannelTopicFmt = "ads1115/channel/%d"
+	// discovery payload keys/values
+	keyName                = "name"
+	keyStateTopic          = "state_topic"
+	keyUnitOfMeasurement   = "unit_of_measurement"
+	keyDeviceClass         = "device_class"
+	keyStateClass          = "state_class"
+	keyValueTemplate       = "value_template"
+	keyJSONAttributesTopic = "json_attributes_topic"
+	keyUniqueID            = "unique_id"
+	unitVolts              = "V"
+	deviceClassVoltage     = "voltage"
+	stateClassMeasurement  = "measurement"
+	valueTemplateVoltage   = "{{ value_json.voltage }}"
+)
+
 type MQTTOutput struct {
 	client         mqtt.Client
 	stateTopic     string
@@ -74,7 +95,7 @@ func (m *MQTTOutput) Publish(readings []sensor.Reading) error {
 		}
 		if topic == "" {
 			// fallback to per-channel topic
-			topic = fmt.Sprintf("ads1115/channel/%d", r.Channel)
+			topic = fmt.Sprintf(perChannelTopicFmt, r.Channel)
 		}
 
 		// publish payload including averaged value and raw (raw is sent as integer)
@@ -148,16 +169,16 @@ func discoveryUniqueID(cfg config.MQTTConfig, ch *config.ChannelConfig) string {
 // helper: base discovery payload map common to all entries
 func baseDiscoveryPayload(name, stateTopic, uniqueID string) map[string]interface{} {
 	payload := map[string]interface{}{
-		"name":                  name,
-		"state_topic":           stateTopic,
-		"unit_of_measurement":   "V",
-		"device_class":          "voltage",
-		"state_class":           "measurement",
-		"value_template":        "{{ value_json.voltage }}",
-		"json_attributes_topic": stateTopic,
+		keyName:                name,
+		keyStateTopic:          stateTopic,
+		keyUnitOfMeasurement:   unitVolts,
+		keyDeviceClass:         deviceClassVoltage,
+		keyStateClass:          stateClassMeasurement,
+		keyValueTemplate:       valueTemplateVoltage,
+		keyJSONAttributesTopic: stateTopic,
 	}
 	if uniqueID != "" {
-		payload["unique_id"] = uniqueID
+		payload[keyUniqueID] = uniqueID
 	}
 	return payload
 }

@@ -9,6 +9,13 @@ import (
 	"strings"
 )
 
+const (
+	// common parsing error format strings
+	invalidMappingFmt  = "invalid mapping '%s'"
+	invalidChannelFmt  = "invalid channel '%s': %w"
+	invalidValueFmtFmt = "invalid value for channel %d: %w"
+)
+
 type MQTTConfig struct {
 	Server   string `json:"server"`
 	Username string `json:"username"`
@@ -347,70 +354,39 @@ func parseCSV(s string) []string {
 // parseChannels removed: use -channel-enabled mapping instead of shorthand CSV.
 
 func parseKeyFloatMap(s string) (map[int]float64, error) {
-	out := map[int]float64{}
-	parts := parseCSV(s)
-	for _, p := range parts {
-		kv := strings.SplitN(p, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid mapping '%s'", p)
-		}
-		k := strings.TrimSpace(kv[0])
-		vstr := strings.TrimSpace(kv[1])
-		ki, err := strconv.Atoi(k)
-		if err != nil {
-			return nil, fmt.Errorf("invalid channel '%s': %w", k, err)
-		}
-		vf, err := strconv.ParseFloat(vstr, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid value for channel %d: %w", ki, err)
-		}
-		out[ki] = vf
-	}
-	return out, nil
+	return parseKeyMap(s, func(v string) (float64, error) { return strconv.ParseFloat(v, 64) })
 }
 
 func parseKeyIntMap(s string) (map[int]int, error) {
-	out := map[int]int{}
-	parts := parseCSV(s)
-	for _, p := range parts {
-		kv := strings.SplitN(p, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid mapping '%s'", p)
-		}
-		k := strings.TrimSpace(kv[0])
-		vstr := strings.TrimSpace(kv[1])
-		ki, err := strconv.Atoi(k)
-		if err != nil {
-			return nil, fmt.Errorf("invalid channel '%s': %w", k, err)
-		}
-		vi, err := strconv.Atoi(vstr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid int value for channel %d: %w", ki, err)
-		}
-		out[ki] = vi
-	}
-	return out, nil
+	return parseKeyMap(s, func(v string) (int, error) { return strconv.Atoi(v) })
 }
 
 func parseKeyBoolMap(s string) (map[int]bool, error) {
-	out := map[int]bool{}
+	return parseKeyMap(s, func(v string) (bool, error) { return strconv.ParseBool(v) })
+}
+
+// parseKeyMap parses comma-separated key=value pairs where key is an integer
+// and the value is parsed by the provided parse function. It consolidates
+// repeated parsing code used above.
+func parseKeyMap[T any](s string, parse func(string) (T, error)) (map[int]T, error) {
+	out := map[int]T{}
 	parts := parseCSV(s)
 	for _, p := range parts {
 		kv := strings.SplitN(p, "=", 2)
 		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid mapping '%s'", p)
+			return nil, fmt.Errorf(invalidMappingFmt, p)
 		}
 		k := strings.TrimSpace(kv[0])
 		vstr := strings.TrimSpace(kv[1])
 		ki, err := strconv.Atoi(k)
 		if err != nil {
-			return nil, fmt.Errorf("invalid channel '%s': %w", k, err)
+			return nil, fmt.Errorf(invalidChannelFmt, k, err)
 		}
-		vb, err := strconv.ParseBool(vstr)
+		v, err := parse(vstr)
 		if err != nil {
-			return nil, fmt.Errorf("invalid bool value for channel %d: %w", ki, err)
+			return nil, fmt.Errorf(invalidValueFmtFmt, ki, err)
 		}
-		out[ki] = vb
+		out[ki] = v
 	}
 	return out, nil
 }
