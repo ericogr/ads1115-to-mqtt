@@ -45,18 +45,33 @@ docker run --rm -it --name ads1115-to-mqtt -v "$(pwd)/config.json":/config.json:
 
 ```json
 {
-  "i2c": { "bus": "2", "address": 72 },
+  "i2c": {
+    "bus": "2",
+    "address": 72
+  },
   "sample_rate": 128,
-  "outputs": [
-    { "type": "console" },
-    { "type": "mqtt", "mqtt": { "server": "tcp://localhost:1883", "client_id": "ads1115", "state_topic": "sensors/machine_battery/voltage", "discovery_topic": "homeassistant/sensor/machine_battery/config", "discovery_name": "Li-Ion machine battery", "discovery_unique_id": "machine_battery_lion_01" } }
-  ],
   "sensor_type": "real",
+  "outputs": [
+    {
+      "type": "console",
+      "interval_ms": 1000
+    },
+    {
+      "type": "mqtt",
+      "interval_ms": 5000,
+      "mqtt": {
+        "server": "tcp://localhost:1883",
+        "client_id": "ads1115-client",
+        "state_topic": "ads1115/channel/%d",
+        "discovery_topic": "homeassistant/sensor/machine_battery_ch%d/config",
+        "discovery_name": "Machine battery",
+        "discovery_unique_id": "machine_battery"
+      }
+    }
+  ],
   "channels": [
-    { "channel": 0, "enabled": true,  "calibration_scale": 1.0, "calibration_offset": 0.0 },
-    { "channel": 1, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 },
-    { "channel": 2, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 },
-    { "channel": 3, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 }
+    { "channel": 0, "enabled": true,  "calibration_scale": 1.53, "calibration_offset": 0.0 },
+    { "channel": 1, "enabled": false, "calibration_scale": 1.0, "calibration_offset": 0.0 }
   ]
 }
 ```
