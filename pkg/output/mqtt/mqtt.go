@@ -3,6 +3,7 @@ package mqtt
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -36,79 +37,27 @@ func NewMQTT(cfg config.MQTTConfig, channels []config.ChannelConfig) (output.Out
 
 	// Publish Home Assistant discovery payload(s) if requested
 	if m.discoveryTopic != "" {
-		// If discoveryTopic contains %d, publish per-channel discovery entries.
+		// per-channel discovery when discoveryTopic contains a formatter
 		if strings.Contains(m.discoveryTopic, "%d") {
 			for _, ch := range channels {
 				if !ch.Enabled {
 					continue
 				}
-				dTopic := fmt.Sprintf(cfg.DiscoveryTopic, ch.Channel)
-				// determine state_topic for this channel
-				var stateTopic string
-				if cfg.StateTopic != "" {
-					if strings.Contains(cfg.StateTopic, "%d") {
-						stateTopic = fmt.Sprintf(cfg.StateTopic, ch.Channel)
-					} else {
-						stateTopic = cfg.StateTopic
-					}
-				} else {
-					stateTopic = fmt.Sprintf("ads1115/channel/%d", ch.Channel)
-				}
-				// build discovery payload
-				name := cfg.DiscoveryName
-				if name == "" {
-					name = fmt.Sprintf("ADS1115 %s", cfg.ClientID)
-				}
-				name = fmt.Sprintf("%s ch%d", name, ch.Channel)
-				uniqueID := cfg.DiscoveryUniqueID
-				if uniqueID == "" {
-					uniqueID = cfg.ClientID
-				}
-				if uniqueID != "" {
-					uniqueID = fmt.Sprintf("%s_%d", uniqueID, ch.Channel)
-				}
-				payload := map[string]interface{}{
-					"name":                  name,
-					"state_topic":           stateTopic,
-					"unit_of_measurement":   "V",
-					"device_class":          "voltage",
-					"state_class":           "measurement",
-					"value_template":        "{{ value_json.voltage }}",
-					"json_attributes_topic": stateTopic,
-				}
-				if uniqueID != "" {
-					payload["unique_id"] = uniqueID
-				}
-				if b, err := json.Marshal(payload); err == nil {
-					token := client.Publish(dTopic, 0, true, b)
-					token.Wait()
+				dTopic := fmt.Sprintf(m.discoveryTopic, ch.Channel)
+				stateTopic := formatStateTopic(cfg.StateTopic, ch.Channel)
+				name := discoveryName(cfg, &ch)
+				uniqueID := discoveryUniqueID(cfg, &ch)
+				payload := baseDiscoveryPayload(name, stateTopic, uniqueID)
+				if err := publishJSON(client, dTopic, true, payload); err != nil {
+					log.Printf("mqtt discovery publish error: %v", err)
 				}
 			}
 		} else {
-			// single discovery entry (no per-channel formatting)
-			name := cfg.DiscoveryName
-			if name == "" {
-				name = fmt.Sprintf("ADS1115 %s", cfg.ClientID)
-			}
-			uniqueID := cfg.DiscoveryUniqueID
-			if uniqueID == "" {
-				uniqueID = cfg.ClientID
-			}
-			payload := map[string]interface{}{
-				"name":                  name,
-				"state_topic":           m.stateTopic,
-				"unit_of_measurement":   "V",
-				"device_class":          "voltage",
-				"state_class":           "measurement",
-				"value_template":        "{{ value_json.voltage }}",
-				"json_attributes_topic": m.stateTopic,
-			}
-			if uniqueID != "" {
-				payload["unique_id"] = uniqueID
-			}
-			if b, err := json.Marshal(payload); err == nil {
-				token := client.Publish(m.discoveryTopic, 0, true, b)
-				token.Wait()
+			name := discoveryName(cfg, nil)
+			uniqueID := discoveryUniqueID(cfg, nil)
+			payload := baseDiscoveryPayload(name, m.stateTopic, uniqueID)
+			if err := publishJSON(client, m.discoveryTopic, true, payload); err != nil {
+				log.Printf("mqtt discovery publish error: %v", err)
 			}
 		}
 	}
@@ -157,6 +106,69 @@ func (m *MQTTOutput) PublishRaw(topic string, payload []byte, retained bool) err
 		return fmt.Errorf("mqtt client not connected")
 	}
 	token := m.client.Publish(topic, 0, retained, payload)
+	token.Wait()
+	return token.Error()
+}
+
+// helper: format a state topic for a channel using an optional formatter
+func formatStateTopic(base string, ch int) string {
+	if base != "" {
+		if strings.Contains(base, "%d") {
+			return fmt.Sprintf(base, ch)
+		}
+		return base
+	}
+	return fmt.Sprintf("ads1115/channel/%d", ch)
+}
+
+// helper: build a human-friendly discovery name; if ch != nil append channel
+func discoveryName(cfg config.MQTTConfig, ch *config.ChannelConfig) string {
+	name := cfg.DiscoveryName
+	if name == "" {
+		name = fmt.Sprintf("ADS1115 %s", cfg.ClientID)
+	}
+	if ch != nil {
+		name = fmt.Sprintf("%s ch%d", name, ch.Channel)
+	}
+	return name
+}
+
+// helper: build a unique id for discovery; if ch != nil append channel
+func discoveryUniqueID(cfg config.MQTTConfig, ch *config.ChannelConfig) string {
+	uid := cfg.DiscoveryUniqueID
+	if uid == "" {
+		uid = cfg.ClientID
+	}
+	if uid != "" && ch != nil {
+		uid = fmt.Sprintf("%s_%d", uid, ch.Channel)
+	}
+	return uid
+}
+
+// helper: base discovery payload map common to all entries
+func baseDiscoveryPayload(name, stateTopic, uniqueID string) map[string]interface{} {
+	payload := map[string]interface{}{
+		"name":                  name,
+		"state_topic":           stateTopic,
+		"unit_of_measurement":   "V",
+		"device_class":          "voltage",
+		"state_class":           "measurement",
+		"value_template":        "{{ value_json.voltage }}",
+		"json_attributes_topic": stateTopic,
+	}
+	if uniqueID != "" {
+		payload["unique_id"] = uniqueID
+	}
+	return payload
+}
+
+// helper: marshal and publish JSON payload
+func publishJSON(client mqtt.Client, topic string, retained bool, payload map[string]interface{}) error {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	token := client.Publish(topic, 0, retained, b)
 	token.Wait()
 	return token.Error()
 }
