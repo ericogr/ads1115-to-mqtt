@@ -44,8 +44,8 @@ func NewADS1115Sensor(cfg config.Config) (Sensor, error) {
 		return nil, fmt.Errorf("open i2c: %w", err)
 	}
 	dev := &i2c.Dev{Addr: uint16(cfg.I2C.Address), Bus: bus}
-    chans, cscale, coff, csr := buildChannelSettings(cfg)
-    return &ADS1115Sensor{dev: dev, bus: bus, channels: chans, defaultSampleRate: cfg.SampleRate, channelSampleRates: csr, channelScales: cscale, channelOffsets: coff, pgaFS: 4.096}, nil
+	chans, cscale, coff, csr := buildChannelSettings(cfg)
+	return &ADS1115Sensor{dev: dev, bus: bus, channels: chans, defaultSampleRate: cfg.SampleRate, channelSampleRates: csr, channelScales: cscale, channelOffsets: coff, pgaFS: 4.096}, nil
 }
 
 func (s *ADS1115Sensor) Close() error {

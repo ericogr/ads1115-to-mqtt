@@ -3,7 +3,6 @@ package mqtt
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -70,7 +69,7 @@ func NewMQTT(cfg config.MQTTConfig, channels []config.ChannelConfig) (output.Out
 				uniqueID := discoveryUniqueID(cfg, &ch)
 				payload := baseDiscoveryPayload(name, stateTopic, uniqueID)
 				if err := publishJSON(client, dTopic, true, payload); err != nil {
-					log.Printf("mqtt discovery publish error: %v", err)
+					return nil, fmt.Errorf("mqtt discovery publish: %w", err)
 				}
 			}
 		} else {
@@ -78,7 +77,7 @@ func NewMQTT(cfg config.MQTTConfig, channels []config.ChannelConfig) (output.Out
 			uniqueID := discoveryUniqueID(cfg, nil)
 			payload := baseDiscoveryPayload(name, m.stateTopic, uniqueID)
 			if err := publishJSON(client, m.discoveryTopic, true, payload); err != nil {
-				log.Printf("mqtt discovery publish error: %v", err)
+				return nil, fmt.Errorf("mqtt discovery publish: %w", err)
 			}
 		}
 	}

@@ -235,7 +235,7 @@ func startOutputWorkers(outs []outputEntry, done <-chan struct{}) {
 						continue
 					}
 					if err := entry.Out.Publish(snapshot); err != nil {
-						log.Printf("output publish error: %v", err)
+						log.Fatalf("output publish error: %v", err)
 					}
 				case <-done:
 					return
